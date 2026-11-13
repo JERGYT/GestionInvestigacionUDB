@@ -8,6 +8,7 @@ export type EstadoProyecto =
   | 'aprobado_lider'
   | 'en_revision_comite'
   | 'en_evaluacion_pares'
+  | 'en_standby'
   | 'aprobado_facultad'
   | 'en_desarrollo'
   | 'novedad_cipade'
@@ -23,7 +24,8 @@ export type TipoEventoTrazabilidad =
   | 'inicio_desarrollo'
   | 'novedad_cipade'
   | 'subsanacion_investigador'
-  | 'cambio_equipo';
+  | 'cambio_equipo'
+  | 'standby';
 
 export interface Usuario {
   id: number;
@@ -150,6 +152,12 @@ export const ESTADOS_METADATA: Record<
     text: '#9A3412',
     border: '#F59E0B'
   },
+  en_standby: {
+    label: 'En Standby (Espera Vacaciones)',
+    bg: '#FEF9E7',
+    text: '#8A6A10',
+    border: '#C59B27'
+  },
   aprobado_facultad: {
     label: 'Aprobado Nivel Facultad',
     bg: '#D1FAE5',
@@ -247,7 +255,7 @@ export const EVENTOS_METADATA: Record<
     border: '#F59E0B'
   },
   aprobacion_facultad: {
-    label: 'Aprobación a Nivel de Facultad',
+    label: 'Aprobación Comité / Promoción de Etapa',
     color: '#065F46',
     bg: '#D1FAE5',
     border: '#10B981'
@@ -275,60 +283,95 @@ export const EVENTOS_METADATA: Record<
     color: '#1F2937',
     bg: '#E5E7EB',
     border: '#9CA3AF'
+  },
+  standby: {
+    label: 'Pausa / Reactivación Standby (Vacaciones)',
+    color: '#8A6A10',
+    bg: '#FEF9E7',
+    border: '#C59B27'
   }
 };
 
-export const ROLES_METADATA: Record<
-  RolUsuario,
-  {
-    label: string;
-    actorDefaultId: number;
-    actorNombre: string;
-    descripcion: string;
-    accent: string;
-    badgeBg: string;
-    badgeText: string;
-    badgeBorder: string;
+export function obtenerResponsableActual(estado: EstadoProyecto): {
+  responsable: string;
+  accionRequerida: string;
+  bg: string;
+  text: string;
+  border: string;
+} {
+  switch (estado) {
+    case 'en_revision_lider':
+      return {
+        responsable: 'Líder de Grupo',
+        accionRequerida: 'Dar aval o devolver con observaciones',
+        bg: '#FEF3C7',
+        text: '#92400E',
+        border: '#F59E0B'
+      };
+    case 'en_revision_investigadores':
+      return {
+        responsable: 'Investigadores Docentes',
+        accionRequerida: 'Subsanar observaciones y reenviar a Líder',
+        bg: '#FEE2E2',
+        text: '#9E0B22',
+        border: '#C8102E'
+      };
+    case 'aprobado_lider':
+    case 'en_revision_comite':
+      return {
+        responsable: 'Comité FIAD',
+        accionRequerida: 'Asignar pares evaluadores o aprobar etapa',
+        bg: '#FEF9E7',
+        text: '#8A6A10',
+        border: '#C59B27'
+      };
+    case 'en_evaluacion_pares':
+      return {
+        responsable: 'Pares Evaluadores / Comité',
+        accionRequerida: 'Registrar concepto de Par 1 y Par 2',
+        bg: '#FFEDD5',
+        text: '#9A3412',
+        border: '#F59E0B'
+      };
+    case 'en_standby':
+      return {
+        responsable: 'En Standby (Pares / Comité)',
+        accionRequerida: 'En espera por receso vacacional (Dic/Feb)',
+        bg: '#FEF9E7',
+        text: '#8A6A10',
+        border: '#C59B27'
+      };
+    case 'en_desarrollo':
+      return {
+        responsable: 'Investigadores / CIPADE',
+        accionRequerida: 'Ejecución, novedad CIPADE o cierre',
+        bg: '#ECFDF5',
+        text: '#047857',
+        border: '#10B981'
+      };
+    case 'novedad_cipade':
+      return {
+        responsable: 'CIPADE / Investigadores',
+        accionRequerida: 'Subsanar novedad CIPADE (retorno directo)',
+        bg: '#FFF1F2',
+        text: '#9E0B22',
+        border: '#C8102E'
+      };
+    case 'aprobado_facultad':
+      return {
+        responsable: 'Facultad FIAD (Cerrado)',
+        accionRequerida: 'Aprobado a nivel de Facultad',
+        bg: '#D1FAE5',
+        text: '#065F46',
+        border: '#059669'
+      };
+    default:
+      return {
+        responsable: 'Archivo Institucional',
+        accionRequerida: 'Sin acciones pendientes',
+        bg: '#F3F4F6',
+        text: '#374151',
+        border: '#D1D5DB'
+      };
   }
-> = {
-  docente: {
-    label: 'Docente Investigador',
-    actorDefaultId: 2,
-    actorNombre: 'Ing. Francisco Vargas',
-    descripcion: 'Radica propuestas docentes, gestiona co-investigadores y registra subsanaciones con fecha y soporte de correo.',
-    accent: '#C8102E',
-    badgeBg: '#FEE2E2',
-    badgeText: '#9E0B22',
-    badgeBorder: '#FCA5A5'
-  },
-  lider_grupo: {
-    label: 'Líder de Grupo',
-    actorDefaultId: 1,
-    actorNombre: 'Dra. Paula Cheng',
-    descripcion: 'Revisa propuestas en primera instancia: devuelve con observaciones a investigadores o da aval para pasar al Comité.',
-    accent: '#10B981',
-    badgeBg: '#D1FAE5',
-    badgeText: '#065F46',
-    badgeBorder: '#6EE7B7'
-  },
-  comite: {
-    label: 'Comité FIAD',
-    actorDefaultId: 4,
-    actorNombre: 'Comité de Investigaciones FIAD',
-    descripcion: 'Asigna pares evaluadores con fecha, aprueba proyectos a nivel de facultad, inicia el desarrollo y registra novedades de CIPADE.',
-    accent: '#C59B27',
-    badgeBg: '#FEF9E7',
-    badgeText: '#8A6A10',
-    badgeBorder: '#C59B27'
-  },
-  par_evaluador: {
-    label: 'Par Evaluador',
-    actorDefaultId: 6,
-    actorNombre: 'Dra. Laura Gómez (Par 2)',
-    descripcion: 'Emite concepto individual con fecha. Si al menos un par devuelve con correcciones, el proyecto regresa a los investigadores.',
-    accent: '#F59E0B',
-    badgeBg: '#FEF3C7',
-    badgeText: '#92400E',
-    badgeBorder: '#F59E0B'
-  }
-};
+}

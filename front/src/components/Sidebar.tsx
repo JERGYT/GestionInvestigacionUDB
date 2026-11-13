@@ -1,15 +1,11 @@
 import React from 'react';
-import { FolderGit2, PlusCircle, CheckSquare, History, UserCheck } from 'lucide-react';
-import type { RolUsuario } from '../types';
-import { ROLES_METADATA } from '../types';
+import { FolderGit2, PlusCircle, GitBranch } from 'lucide-react';
 
-export type VistaApp = 'gestion' | 'radicar' | 'evaluacion' | 'seguimiento';
+export type VistaApp = 'gestion' | 'radicar';
 
 export interface SidebarProps {
   vistaActual: VistaApp;
   setVistaActual: (vista: VistaApp) => void;
-  rolActual: RolUsuario;
-  setRolActual: (rol: RolUsuario) => void;
 }
 
 interface MenuItem {
@@ -18,26 +14,16 @@ interface MenuItem {
   icon: React.ComponentType<{ size?: number; color?: string }>;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({
-  vistaActual,
-  setVistaActual,
-  rolActual,
-  setRolActual
-}) => {
+export const Sidebar: React.FC<SidebarProps> = ({ vistaActual, setVistaActual }) => {
   const menu: MenuItem[] = [
-    { id: 'gestion', label: 'Proyectos Docentes', icon: FolderGit2 },
-    { id: 'radicar', label: 'Radicar Proyecto', icon: PlusCircle },
-    { id: 'evaluacion', label: 'Flujo, Pares y Subsanación', icon: CheckSquare },
-    { id: 'seguimiento', label: 'Historial de Trazabilidad', icon: History },
+    { id: 'gestion', label: 'Tablero y Trazabilidad', icon: FolderGit2 },
+    { id: 'radicar', label: 'Radicar Propuesta', icon: PlusCircle }
   ];
-
-  const roles: RolUsuario[] = ['docente', 'lider_grupo', 'comite', 'par_evaluador'];
-  const metaRol = ROLES_METADATA[rolActual];
 
   return (
     <aside
       style={{
-        width: '285px',
+        width: '280px',
         backgroundColor: '#1C1C1E',
         color: '#D1D5DB',
         display: 'flex',
@@ -85,7 +71,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
           >
             UB | Universidad de Boyacá
           </h2>
-          <small style={{ color: '#C59B27', fontSize: '11px', fontWeight: 600, display: 'block', marginTop: '2px' }}>
+          <small
+            style={{
+              color: '#C59B27',
+              fontSize: '11px',
+              fontWeight: 600,
+              display: 'block',
+              marginTop: '2px'
+            }}
+          >
             Gestión Investigativa FIAD
           </small>
         </div>
@@ -110,7 +104,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             padding: '0 8px 6px 8px'
           }}
         >
-          Módulos del Sistema
+          Vistas Principales
         </div>
         {menu.map((item) => {
           const Icon = item.icon;
@@ -140,15 +134,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
         })}
       </nav>
 
-      {/* Selector de Rol Simulado en vivo */}
+      {/* Resumen de Reglas del Flujo FIAD */}
       <div
         style={{
-          padding: '16px',
+          padding: '15px',
           margin: '12px',
           backgroundColor: '#27272A',
           borderRadius: '10px',
           border: '1px solid #3F3F46',
-          borderTop: `3px solid ${metaRol.accent}`
+          borderTop: '3px solid #C59B27'
         }}
       >
         <div
@@ -163,39 +157,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
             color: '#C59B27'
           }}
         >
-          <UserCheck size={15} color="#C59B27" />
-          Selector de Rol (Simulación)
+          <GitBranch size={15} color="#C59B27" />
+          Ciclo de Etapas FIAD
         </div>
-
-        <select
-          aria-label="Selector de rol simulado"
-          value={rolActual}
-          onChange={(e) => setRolActual(e.target.value as RolUsuario)}
-          style={{
-            width: '100%',
-            backgroundColor: '#1C1C1E',
-            color: '#FFFFFF',
-            border: '1px solid #3F3F46',
-            borderRadius: '6px',
-            padding: '9px 10px',
-            fontSize: '13px',
-            fontWeight: 600,
-            cursor: 'pointer',
-            marginBottom: '10px'
-          }}
-        >
-          {roles.map((r) => (
-            <option key={r} value={r}>
-              {ROLES_METADATA[r].label}
-            </option>
-          ))}
-        </select>
-
-        <div style={{ fontSize: '11.5px', color: '#D1D5DB', marginBottom: '4px' }}>
-          Actor activo: <strong style={{ color: '#FFFFFF' }}>{metaRol.actorNombre}</strong>
+        <div style={{ fontSize: '11.5px', color: '#FFFFFF', fontWeight: 600, marginBottom: '6px', lineHeight: 1.4 }}>
+          Idea → Anteproyecto → Proyecto → Desarrollo → Informe Final
         </div>
-        <div style={{ fontSize: '11px', color: '#9CA3AF', lineHeight: 1.4 }}>
-          {metaRol.descripcion}
+        <div style={{ fontSize: '11px', color: '#9CA3AF', lineHeight: 1.45 }}>
+          • Al aprobar en Comité se promueve automáticamente a la siguiente etapa.<br />
+          • Las Novedades CIPADE retornan directo a Desarrollo tras subsanarse.<br />
+          • Incluye estado Standby para recesos de pares (Dic/Feb).
         </div>
       </div>
     </aside>

@@ -3,15 +3,12 @@ import { AdminShell } from './components/AdminShell';
 import type { VistaApp } from './components/Sidebar';
 import { GestionProyectos } from './pages/GestionProyectos';
 import { RadicarProyecto } from './pages/RadicarProyecto';
-import { DictamenComite } from './pages/DictamenComite';
-import { SeguimientoAvances } from './pages/SeguimientoAvances';
 import { proyectosService } from './services/proyectos';
 import { mockCatalogos } from './services/mocks/db';
-import type { Catalogos, Proyecto, RolUsuario } from './types';
+import type { Catalogos, Proyecto } from './types';
 
 export function App() {
   const [vistaActual, setVistaActual] = useState<VistaApp>('gestion');
-  const [rolActual, setRolActual] = useState<RolUsuario>('lider_grupo');
   const [catalogos, setCatalogos] = useState<Catalogos>(mockCatalogos);
   const [proyectos, setProyectos] = useState<Proyecto[]>([]);
   const [seleccionado, setSeleccionado] = useState<Proyecto | null>(null);
@@ -46,12 +43,7 @@ export function App() {
   }, []);
 
   return (
-    <AdminShell
-      vistaActual={vistaActual}
-      setVistaActual={setVistaActual}
-      rolActual={rolActual}
-      setRolActual={setRolActual}
-    >
+    <AdminShell vistaActual={vistaActual} setVistaActual={setVistaActual}>
       {vistaActual === 'gestion' && (
         <GestionProyectos
           proyectos={proyectos}
@@ -59,7 +51,6 @@ export function App() {
           seleccionado={seleccionado}
           setSeleccionado={setSeleccionado}
           setVistaActual={setVistaActual}
-          rolActual={rolActual}
           onProyectoActualizado={(proyectoActualizado) => {
             if (proyectoActualizado) {
               setSeleccionado(proyectoActualizado);
@@ -77,39 +68,6 @@ export function App() {
             setVistaActual('gestion');
           }}
           onCancelar={() => setVistaActual('gestion')}
-        />
-      )}
-
-      {vistaActual === 'evaluacion' && seleccionado && (
-        <DictamenComite
-          key={`${seleccionado.id}-${seleccionado.rondas_revision}-${seleccionado.estado_actual}`}
-          proyecto={seleccionado}
-          catalogos={catalogos}
-          rolActual={rolActual}
-          setRolActual={setRolActual}
-          onEvaluado={(proyectoActualizado) => {
-            if (proyectoActualizado) {
-              setSeleccionado(proyectoActualizado);
-            }
-            void cargarProyectos(proyectoActualizado?.id ?? seleccionado.id);
-            setVistaActual('seguimiento');
-          }}
-          onVolver={() => setVistaActual('gestion')}
-        />
-      )}
-
-      {vistaActual === 'seguimiento' && seleccionado && (
-        <SeguimientoAvances
-          proyecto={seleccionado}
-          catalogos={catalogos}
-          onActualizado={(proyectoActualizado) => {
-            if (proyectoActualizado) {
-              setSeleccionado(proyectoActualizado);
-            }
-            void cargarProyectos(proyectoActualizado?.id ?? seleccionado.id);
-          }}
-          onIrASubsanar={() => setVistaActual('evaluacion')}
-          onVolver={() => setVistaActual('gestion')}
         />
       )}
     </AdminShell>

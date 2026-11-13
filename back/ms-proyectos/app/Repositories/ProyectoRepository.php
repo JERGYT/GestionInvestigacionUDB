@@ -219,12 +219,55 @@ class ProyectoRepository {
                 case 'aprobar_facultad':
                     $actorId = (int)($datos['actor_id'] ?? 4);
                     $tipoEvento = 'aprobacion_facultad';
-                    $proyecto->estado_actual = 'aprobado_facultad';
-                    if (!empty($datos['nueva_etapa']) && in_array($datos['nueva_etapa'], ['idea', 'anteproyecto', 'proyecto', 'desarrollo', 'informe_final'], true)) {
-                        $proyecto->etapa_actual = $datos['nueva_etapa'];
+                    $etapaPrevia = $proyecto->etapa_actual;
+
+                    if ($etapaPrevia === 'idea') {
+                        $proyecto->etapa_actual = 'anteproyecto';
+                        $proyecto->estado_actual = 'en_revision_lider';
+                        $msgDefault = 'El Comité FIAD aprueba la etapa de Idea. El proyecto avanza a etapa de Anteproyecto y pasa a revisión del Líder de Grupo.';
+                    } elseif ($etapaPrevia === 'anteproyecto') {
+                        $proyecto->etapa_actual = 'proyecto';
+                        $proyecto->estado_actual = 'en_revision_lider';
+                        $msgDefault = 'El Comité FIAD aprueba el Anteproyecto. El proyecto avanza a etapa de Proyecto y pasa a revisión del Líder de Grupo.';
+                    } elseif ($etapaPrevia === 'proyecto') {
+                        $proyecto->etapa_actual = 'desarrollo';
+                        $proyecto->estado_actual = 'en_desarrollo';
+                        $msgDefault = 'El Comité FIAD aprueba el Proyecto a nivel de Facultad e inicia formalmente la etapa de Desarrollo.';
+                    } elseif ($etapaPrevia === 'desarrollo') {
+                        $proyecto->etapa_actual = 'informe_final';
+                        $proyecto->estado_actual = 'aprobado_facultad';
+                        $msgDefault = 'El Comité FIAD aprueba el cierre de la etapa de Desarrollo. El proyecto pasa a Informe Final con estado Aprobado a nivel de Facultad.';
+                    } else {
+                        $proyecto->estado_actual = 'aprobado_facultad';
+                        $msgDefault = 'El Comité de Investigación aprueba formalmente el Informe Final a nivel de Facultad.';
                     }
+
                     if ($observaciones === '') {
-                        $observaciones = 'El Comité de Investigación aprueba formalmente el proyecto a nivel de Facultad.';
+                        $observaciones = $msgDefault;
+                    }
+                    break;
+
+                case 'en_standby':
+                case 'standby':
+                    $actorId = (int)($datos['actor_id'] ?? 4);
+                    $tipoEvento = 'standby';
+                    $proyecto->estado_actual = 'en_standby';
+                    if ($observaciones === '') {
+                        $observaciones = 'El proceso se coloca en espera (Standby) por periodo vacacional de pares evaluadores (diciembre/febrero).';
+                    }
+                    break;
+
+                case 'reactivar_standby':
+                    $actorId = (int)($datos['actor_id'] ?? 4);
+                    $tipoEvento = 'standby';
+                    $destinoDefault = $proyecto->fecha_asignacion_pares ? 'en_evaluacion_pares' : 'en_revision_comite';
+                    $estadoDestino = !empty($datos['estado_destino']) ? trim($datos['estado_destino']) : $destinoDefault;
+                    if (!in_array($estadoDestino, ['en_revision_lider', 'en_revision_comite', 'en_evaluacion_pares', 'en_desarrollo'], true)) {
+                        $estadoDestino = $destinoDefault;
+                    }
+                    $proyecto->estado_actual = $estadoDestino;
+                    if ($observaciones === '') {
+                        $observaciones = 'Se reactiva el proceso tras finalizar el periodo de espera (Standby).';
                     }
                     break;
 
@@ -429,10 +472,12 @@ class ProyectoRepository {
             }
 
             
-            if ($estadoAnterior === 'novedad_cipade' || $proyecto->etapa_actual === 'desarrollo') {
+            if ($estadoAnterior === 'novedad_cipade') {
                 $estadoNuevo = 'en_desarrollo';
+                $obsDefault = 'Los investigadores subsanaron la Novedad de CIPADE. El proyecto retorna directamente a Desarrollo sin pasar nuevamente por Comité.';
             } else {
-                $estadoNuevo = !empty($datos['estado_nuevo']) ? $datos['estado_nuevo'] : 'en_revision_lider';
+                $estadoNuevo = 'en_revision_lider';
+                $obsDefault = 'Los investigadores subsanaron las observaciones y remitieron los soportes por correo institucional para revisión del Líder de Grupo.';
             }
 
             $proyecto->estado_actual = $estadoNuevo;
@@ -441,7 +486,7 @@ class ProyectoRepository {
             $actorId = (int)($datos['actor_id'] ?? $proyecto->investigador_principal_id);
             $observaciones = trim($datos['observaciones'] ?? '');
             if ($observaciones === '') {
-                $observaciones = 'Los investigadores subsanaron las observaciones y remitieron los soportes por correo institucional.';
+                $observaciones = $obsDefault;
             }
 
             HistorialTrazabilidad::create([
