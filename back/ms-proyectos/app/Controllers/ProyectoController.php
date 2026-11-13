@@ -13,15 +13,6 @@ class ProyectoController {
     }
 
     private function formatearProyecto($p): array {
-        if ($p->documento_actual_url) {
-            $this->repository->asegurarArchivoPdf(
-                $p->documento_actual_url,
-                $p->titulo,
-                (int)$p->version_documento,
-                'Documento vigente del proyecto'
-            );
-        }
-
         return [
             'id'                        => (int)$p->id,
             'titulo'                    => $p->titulo,
@@ -37,8 +28,6 @@ class ProyectoController {
             'rondas_revision'           => (int)$p->rondas_revision,
             'fecha_radicacion'          => $p->fecha_radicacion,
             'fecha_asignacion_pares'    => $p->fecha_asignacion_pares,
-            'documento_actual_url'      => $p->documento_actual_url,
-            'version_documento'         => (int)$p->version_documento,
             'equipo'                    => $p->equipo->map(function ($m) {
                 return [
                     'id'                => (int)$m->id,
@@ -52,29 +41,19 @@ class ProyectoController {
                     'fecha_retiro'      => $m->fecha_retiro
                 ];
             })->values()->all(),
-            'trazabilidad'              => $p->trazabilidad->map(function ($t) use ($p) {
-                if ($t->archivo_pdf_url) {
-                    $this->repository->asegurarArchivoPdf(
-                        $t->archivo_pdf_url,
-                        $p->titulo,
-                        (int)($t->version_documento ?: 1),
-                        $t->observaciones
-                    );
-                }
+            'trazabilidad'              => $p->trazabilidad->map(function ($t) {
                 return [
-                    'id'                => (int)$t->id,
-                    'proyecto_id'       => (int)$t->proyecto_id,
-                    'etapa'             => $t->etapa,
-                    'estado_anterior'   => $t->estado_anterior,
-                    'estado_nuevo'      => $t->estado_nuevo,
-                    'actor_id'          => (int)$t->actor_id,
-                    'actor_nombre'      => $t->actor ? $t->actor->nombre : 'Sistema',
-                    'actor_rol'         => $t->actor ? $t->actor->rol : 'docente',
-                    'tipo_evento'       => $t->tipo_evento,
-                    'observaciones'     => $t->observaciones,
-                    'version_documento' => $t->version_documento !== null ? (int)$t->version_documento : null,
-                    'archivo_pdf_url'   => $t->archivo_pdf_url,
-                    'fecha_evento'      => $t->fecha_evento
+                    'id'              => (int)$t->id,
+                    'proyecto_id'     => (int)$t->proyecto_id,
+                    'etapa'           => $t->etapa,
+                    'estado_anterior' => $t->estado_anterior,
+                    'estado_nuevo'    => $t->estado_nuevo,
+                    'actor_id'        => (int)$t->actor_id,
+                    'actor_nombre'    => $t->actor ? $t->actor->nombre : 'Sistema',
+                    'actor_rol'       => $t->actor ? $t->actor->rol : 'docente',
+                    'tipo_evento'     => $t->tipo_evento,
+                    'observaciones'   => $t->observaciones,
+                    'fecha_evento'    => $t->fecha_evento
                 ];
             })->values()->all(),
             'evaluaciones_pares'        => $p->evaluacionesPares->map(function ($ev) {
@@ -148,8 +127,7 @@ class ProyectoController {
         }
 
         try {
-            $archivo = $_FILES['archivo_pdf'] ?? null;
-            $proyecto = $this->repository->crear($input, $archivo);
+            $proyecto = $this->repository->crear($input);
             return $this->jsonResponse($response, [
                 'success' => true,
                 'message' => 'Proyecto docente radicado exitosamente en estado En Revisión Líder.',
@@ -205,11 +183,10 @@ class ProyectoController {
         $input = $this->extraerInput($request);
 
         try {
-            $archivo = $_FILES['archivo_pdf'] ?? null;
-            $proyecto = $this->repository->subsanar($id, $input, $archivo);
+            $proyecto = $this->repository->subsanar($id, $input);
             return $this->jsonResponse($response, [
                 'success' => true,
-                'message' => 'Subsanación y nueva versión de documento registradas con éxito.',
+                'message' => 'Subsanación y registro histórico guardados con éxito.',
                 'data'    => $this->formatearProyecto($proyecto)
             ], 200);
         } catch (\Throwable $e) {

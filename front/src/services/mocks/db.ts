@@ -69,8 +69,6 @@ export const mockProyectos: Proyecto[] = [
     rondas_revision: 2,
     fecha_radicacion: '2026-11-03',
     fecha_asignacion_pares: null,
-    documento_actual_url: 'docs/proyecto1_v2.pdf',
-    version_documento: 2,
     equipo: [
       { id: 1, usuario_id: 2, nombre: 'Ing. Francisco Vargas', email: 'fvargas@uniboyaca.edu.co', programa: 'Ingeniería de Sistemas', rol_equipo: 'principal', activo: true, fecha_vinculacion: '2026-11-03', fecha_retiro: null },
       { id: 2, usuario_id: 3, nombre: 'Ing. Martha Celene', email: 'mcelene@uniboyaca.edu.co', programa: 'Ingeniería de Sistemas', rol_equipo: 'coinvestigador', activo: true, fecha_vinculacion: '2026-11-03', fecha_retiro: null }
@@ -86,9 +84,7 @@ export const mockProyectos: Proyecto[] = [
         actor_nombre: 'Ing. Francisco Vargas',
         actor_rol: 'docente',
         tipo_evento: 'subsanacion_investigador',
-        observaciones: 'Se cargó nueva versión v2 con los objetivos ajustados según indicaciones.',
-        version_documento: 2,
-        archivo_pdf_url: 'docs/proyecto1_v2.pdf',
+        observaciones: 'Se remitió por correo institucional el documento con los objetivos específicos ajustados según indicaciones.',
         fecha_evento: '2026-11-11 10:00:00'
       },
       {
@@ -102,8 +98,6 @@ export const mockProyectos: Proyecto[] = [
         actor_rol: 'lider_grupo',
         tipo_evento: 'devolucion_lider',
         observaciones: 'Se realizó reunión el 06/11 y se envió correo solicitando ajustar los objetivos específicos.',
-        version_documento: 1,
-        archivo_pdf_url: 'docs/proyecto1_v1.pdf',
         fecha_evento: '2026-11-06 14:15:00'
       },
       {
@@ -117,8 +111,6 @@ export const mockProyectos: Proyecto[] = [
         actor_rol: 'docente',
         tipo_evento: 'radicacion_inicial',
         observaciones: 'Radicación inicial de la idea en formato institucional.',
-        version_documento: 1,
-        archivo_pdf_url: 'docs/proyecto1_v1.pdf',
         fecha_evento: '2026-11-03 09:30:00'
       }
     ],

@@ -23,6 +23,20 @@ class ProyectoRepository {
         ];
     }
 
+    private function normalizarFechaEvento(?string $fechaInput): string {
+        if (!$fechaInput || trim($fechaInput) === '') {
+            return date('Y-m-d H:i:s');
+        }
+        $limpia = str_replace('T', ' ', trim($fechaInput));
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $limpia)) {
+            return $limpia . ' ' . date('H:i:s');
+        }
+        if (preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/', $limpia)) {
+            return $limpia . ':00';
+        }
+        return $limpia;
+    }
+
     public function obtenerCatalogos(): array {
         return [
             'lineas'    => LineaInvestigacion::with('sublineas')->where('activa', 1)->orderBy('id')->get(),
@@ -51,61 +65,16 @@ class ProyectoRepository {
         return Proyecto::with($this->relacionesProyecto())->findOrFail($id);
     }
 
-    public function asegurarArchivoPdf(string $relativePath, string $titulo, int $version, string $detalle = ''): void {
-        $publicDir = dirname(__DIR__, 2) . '/public';
-        $fullPath = $publicDir . '/' . ltrim($relativePath, '/');
-        $dir = dirname($fullPath);
-
-        if (!is_dir($dir)) {
-            mkdir($dir, 0777, true);
-        }
-
-        if (file_exists($fullPath) && filesize($fullPath) > 0) {
-            return;
-        }
-
-        $safeTitulo = preg_replace('/[^A-Za-z0-9 \-_:.,]/', '', iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $titulo) ?: $titulo);
-        $safeDetalle = preg_replace('/[^A-Za-z0-9 \-_:.,]/', '', iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $detalle) ?: $detalle);
-        $fecha = date('Y-m-d H:i:s');
-
-        $lines = [
-            "UNIVERSIDAD DE BOYACA - FACULTAD DE INGENIERIA (FIAD)",
-            "Sistema de Gestion y Trazabilidad de Proyectos Docentes",
-            "--------------------------------------------------------",
-            "Proyecto: " . substr($safeTitulo, 0, 75),
-            "Version del Documento: v" . $version,
-            "Fecha de Generacion: " . $fecha,
-            "Detalle: " . substr($safeDetalle, 0, 85),
-            "Archivo Oficial: " . $relativePath
-        ];
-
-        $streamContent = "BT\n/F1 12 Tf\n50 750 Td\n18 TL\n";
-        foreach ($lines as $line) {
-            $escaped = str_replace(['\\', '(', ')'], ['\\\\', '\\(', '\\)'], $line);
-            $streamContent .= "(" . $escaped . ") Tj T*\n";
-        }
-        $streamContent .= "ET";
-        $len = strlen($streamContent);
-
-        $pdf = "%PDF-1.4\n"
-            . "1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n"
-            . "2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n"
-            . "3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >> endobj\n"
-            . "4 0 obj << /Length {$len} >> stream\n{$streamContent}\nendstream endobj\n"
-            . "5 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj\n"
-            . "xref\n0 6\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \n0000000229 00000 n \n0000000" . (280 + $len) . " 00000 n \n"
-            . "trailer << /Size 6 /Root 1 0 R >>\nstartxref\n" . (350 + $len) . "\n%%EOF";
-
-        file_put_contents($fullPath, $pdf);
-    }
-
-    public function crear(array $datos, ?array $archivoSubido = null) {
-        return DB::transaction(function () use ($datos, $archivoSubido) {
+    public function crear(array $datos) {
+        return DB::transaction(function () use ($datos) {
             $principalId = (int)($datos['investigador_principal_id'] ?? 2);
             $lineaId = (int)($datos['linea_id'] ?? 1);
             $sublineaId = (int)($datos['sublinea_id'] ?? 1);
             $etapa = $datos['etapa_actual'] ?? 'idea';
-            $fechaHoy = date('Y-m-d');
+
+            $fechaInput = $datos['fecha_radicacion'] ?? $datos['fecha_evento'] ?? null;
+            $fechaRadicacion = $fechaInput ? substr(trim($fechaInput), 0, 10) : date('Y-m-d');
+            $fechaEvento = $this->normalizarFechaEvento($datos['fecha_evento'] ?? $fechaRadicacion);
 
             $proyecto = Proyecto::create([
                 'titulo'                    => trim($datos['titulo']),
@@ -116,34 +85,20 @@ class ProyectoRepository {
                 'etapa_actual'              => $etapa,
                 'estado_actual'             => 'en_revision_lider',
                 'rondas_revision'           => 0,
-                'fecha_radicacion'          => $fechaHoy,
-                'fecha_asignacion_pares'    => null,
-                'documento_actual_url'      => null,
-                'version_documento'         => 1
+                'fecha_radicacion'          => $fechaRadicacion,
+                'fecha_asignacion_pares'    => null
             ]);
 
-            $docUrl = "docs/proyecto{$proyecto->id}_v1.pdf";
-            if ($archivoSubido && isset($archivoSubido['tmp_name']) && is_uploaded_file($archivoSubido['tmp_name'])) {
-                $publicDir = dirname(__DIR__, 2) . '/public/docs';
-                if (!is_dir($publicDir)) {
-                    mkdir($publicDir, 0777, true);
-                }
-                move_uploaded_file($archivoSubido['tmp_name'], $publicDir . "/proyecto{$proyecto->id}_v1.pdf");
-            } else {
-                $this->asegurarArchivoPdf($docUrl, $proyecto->titulo, 1, 'Radicacion inicial de proyecto docente');
-            }
-
-            $proyecto->documento_actual_url = $docUrl;
-            $proyecto->save();
-
+            
             ProyectoInvestigador::create([
                 'proyecto_id'       => $proyecto->id,
                 'usuario_id'        => $principalId,
                 'rol_equipo'        => 'principal',
                 'activo'            => 1,
-                'fecha_vinculacion' => $fechaHoy
+                'fecha_vinculacion' => $fechaRadicacion
             ]);
 
+            
             $coinvestigadores = $datos['coinvestigadores_ids'] ?? [];
             if (is_string($coinvestigadores)) {
                 $decoded = json_decode($coinvestigadores, true);
@@ -159,23 +114,22 @@ class ProyectoRepository {
                             'usuario_id'        => $coId,
                             'rol_equipo'        => 'coinvestigador',
                             'activo'            => 1,
-                            'fecha_vinculacion' => $fechaHoy
+                            'fecha_vinculacion' => $fechaRadicacion
                         ]);
                     }
                 }
             }
 
+            
             HistorialTrazabilidad::create([
-                'proyecto_id'       => $proyecto->id,
-                'etapa'             => $etapa,
-                'estado_anterior'   => null,
-                'estado_nuevo'      => 'en_revision_lider',
-                'actor_id'          => $principalId,
-                'tipo_evento'       => 'radicacion_inicial',
-                'observaciones'     => trim($datos['observaciones'] ?? 'Radicación inicial de propuesta docente en formato institucional para revisión del Líder de Grupo.'),
-                'version_documento' => 1,
-                'archivo_pdf_url'   => $docUrl,
-                'fecha_evento'      => date('Y-m-d H:i:s')
+                'proyecto_id'     => $proyecto->id,
+                'etapa'           => $etapa,
+                'estado_anterior' => null,
+                'estado_nuevo'    => 'en_revision_lider',
+                'actor_id'        => $principalId,
+                'tipo_evento'     => 'radicacion_inicial',
+                'observaciones'   => trim($datos['observaciones'] ?? 'Radicación inicial de propuesta docente remitida por correo institucional para revisión del Líder de Grupo.'),
+                'fecha_evento'    => $fechaEvento
             ]);
 
             return $this->obtenerPorId($proyecto->id);
@@ -188,7 +142,8 @@ class ProyectoRepository {
             $accion = strtolower(trim($datos['accion'] ?? $datos['tipo_evento'] ?? ''));
             $estadoAnterior = $proyecto->estado_actual;
             $observaciones = trim($datos['observaciones'] ?? '');
-            $fechaAhora = date('Y-m-d H:i:s');
+            $fechaEvento = $this->normalizarFechaEvento($datos['fecha_evento'] ?? $datos['fecha_movimiento'] ?? null);
+            $fechaCorta = substr($fechaEvento, 0, 10);
 
             switch ($accion) {
                 case 'devolucion_lider':
@@ -198,7 +153,7 @@ class ProyectoRepository {
                     $proyecto->estado_actual = 'en_revision_investigadores';
                     $proyecto->rondas_revision = (int)$proyecto->rondas_revision + 1;
                     if ($observaciones === '') {
-                        $observaciones = 'El Líder de Grupo devuelve el proyecto con observaciones para subsanación por parte de los investigadores.';
+                        $observaciones = 'El Líder de Grupo devuelve el proyecto con observaciones enviadas por correo institucional.';
                     }
                     break;
 
@@ -215,9 +170,12 @@ class ProyectoRepository {
                 case 'asignar_pares':
                     $actorId = (int)($datos['actor_id'] ?? 4);
                     $tipoEvento = 'asignacion_pares';
-                    $fechaAsignacion = !empty($datos['fecha_asignacion']) ? $datos['fecha_asignacion'] : date('Y-m-d');
+                    $fechaAsignacion = !empty($datos['fecha_asignacion'])
+                        ? substr(trim($datos['fecha_asignacion']), 0, 10)
+                        : $fechaCorta;
                     $proyecto->estado_actual = 'en_evaluacion_pares';
                     $proyecto->fecha_asignacion_pares = $fechaAsignacion;
+                    $fechaEvento = $this->normalizarFechaEvento($datos['fecha_evento'] ?? $fechaAsignacion);
 
                     $paresIds = $datos['pares_ids'] ?? [5, 6];
                     if (is_array($paresIds) && count($paresIds) > 0) {
@@ -248,7 +206,7 @@ class ProyectoRepository {
 
                         if ($observaciones === '') {
                             $listaNombres = count($nombresPares) > 0 ? implode(', ', $nombresPares) : 'Pares Evaluadores';
-                            $observaciones = "El Comité FIAD asignó pares evaluadores ({$listaNombres}) en fecha {$fechaAsignacion} (Ronda {$nuevaRonda}).";
+                            $observaciones = "El Comité FIAD asignó pares evaluadores ({$listaNombres}) con fecha {$fechaAsignacion} (Ronda {$nuevaRonda}).";
                         }
                     } else {
                         if ($observaciones === '') {
@@ -277,7 +235,7 @@ class ProyectoRepository {
                     $proyecto->etapa_actual = 'desarrollo';
                     $proyecto->estado_actual = 'en_desarrollo';
                     if ($observaciones === '') {
-                        $observaciones = 'El proyecto inicia formalmente su fase de Desarrollo y ejecución presupuestal/académica.';
+                        $observaciones = 'El proyecto inicia formalmente su etapa de Desarrollo según acta de facultad.';
                     }
                     break;
 
@@ -288,35 +246,54 @@ class ProyectoRepository {
                     $proyecto->estado_actual = 'novedad_cipade';
                     $proyecto->rondas_revision = (int)$proyecto->rondas_revision + 1;
                     if ($observaciones === '') {
-                        $observaciones = 'Se registra Novedad de CIPADE. El proyecto se devuelve directamente a los investigadores docentes para subsanación sin pasar por el Comité.';
+                        $observaciones = 'Se registra Novedad de CIPADE. El proyecto se devuelve directamente a los investigadores docentes sin pasar por el Comité.';
                     }
                     break;
 
                 case 'cambio_equipo':
                     $actorId = (int)($datos['actor_id'] ?? $proyecto->investigador_principal_id);
                     $tipoEvento = 'cambio_equipo';
+                    $fechaCambio = !empty($datos['fecha_cambio'])
+                        ? substr(trim($datos['fecha_cambio']), 0, 10)
+                        : $fechaCorta;
+                    $detalleAutomatico = '';
+
                     if (!empty($datos['nuevo_usuario_id'])) {
                         $nuevoId = (int)$datos['nuevo_usuario_id'];
+                        $rolEquipo = in_array($datos['rol_equipo'] ?? '', ['coinvestigador', 'codirector'], true)
+                            ? $datos['rol_equipo']
+                            : 'coinvestigador';
+                        $docente = Usuario::findOrFail($nuevoId);
+
                         ProyectoInvestigador::updateOrCreate(
                             ['proyecto_id' => $proyecto->id, 'usuario_id' => $nuevoId],
                             [
-                                'rol_equipo'        => $datos['rol_equipo'] ?? 'coinvestigador',
+                                'rol_equipo'        => $rolEquipo,
                                 'activo'            => 1,
-                                'fecha_vinculacion' => date('Y-m-d'),
+                                'fecha_vinculacion' => $fechaCambio,
                                 'fecha_retiro'      => null
                             ]
                         );
+                        $detalleAutomatico = "Se vincula a {$docente->nombre} como {$rolEquipo} a partir del {$fechaCambio}.";
                     }
+
                     if (!empty($datos['retirar_usuario_id'])) {
+                        $retirarId = (int)$datos['retirar_usuario_id'];
+                        $docenteRetirado = Usuario::find($retirarId);
                         ProyectoInvestigador::where('proyecto_id', $proyecto->id)
-                            ->where('usuario_id', (int)$datos['retirar_usuario_id'])
+                            ->where('usuario_id', $retirarId)
                             ->update([
                                 'activo'       => 0,
-                                'fecha_retiro' => date('Y-m-d')
+                                'fecha_retiro' => $fechaCambio
                             ]);
+                        $nombreRetirado = $docenteRetirado ? $docenteRetirado->nombre : "Docente #{$retirarId}";
+                        $detalleAutomatico = "Se registra el retiro del co-investigador {$nombreRetirado} con fecha {$fechaCambio}.";
                     }
-                    if ($observaciones === '') {
-                        $observaciones = 'Actualización en la conformación del equipo de investigadores docentes.';
+
+                    if ($observaciones !== '' && $detalleAutomatico !== '') {
+                        $observaciones = $detalleAutomatico . ' Motivo/Soporte: ' . $observaciones;
+                    } elseif ($observaciones === '') {
+                        $observaciones = $detalleAutomatico ?: 'Actualización en la conformación del equipo de investigadores docentes.';
                     }
                     break;
 
@@ -327,16 +304,14 @@ class ProyectoRepository {
             $proyecto->save();
 
             HistorialTrazabilidad::create([
-                'proyecto_id'       => $proyecto->id,
-                'etapa'             => $proyecto->etapa_actual,
-                'estado_anterior'   => $estadoAnterior,
-                'estado_nuevo'      => $proyecto->estado_actual,
-                'actor_id'          => $actorId,
-                'tipo_evento'       => $tipoEvento,
-                'observaciones'     => $observaciones,
-                'version_documento' => $proyecto->version_documento,
-                'archivo_pdf_url'   => $proyecto->documento_actual_url,
-                'fecha_evento'      => $fechaAhora
+                'proyecto_id'     => $proyecto->id,
+                'etapa'           => $proyecto->etapa_actual,
+                'estado_anterior' => $estadoAnterior,
+                'estado_nuevo'    => $proyecto->estado_actual,
+                'actor_id'        => $actorId,
+                'tipo_evento'     => $tipoEvento,
+                'observaciones'   => $observaciones,
+                'fecha_evento'    => $fechaEvento
             ]);
 
             return $this->obtenerPorId($proyecto->id);
@@ -353,7 +328,10 @@ class ProyectoRepository {
             }
 
             $parUsuarioId = (int)($datos['par_usuario_id'] ?? 5);
-            $fechaConcepto = !empty($datos['fecha_concepto']) ? $datos['fecha_concepto'] : date('Y-m-d');
+            $fechaConcepto = !empty($datos['fecha_concepto'])
+                ? substr(trim($datos['fecha_concepto']), 0, 10)
+                : (!empty($datos['fecha_evento']) ? substr(trim($datos['fecha_evento']), 0, 10) : date('Y-m-d'));
+            $fechaEvento = $this->normalizarFechaEvento($datos['fecha_evento'] ?? $fechaConcepto);
             $observaciones = trim($datos['concepto_observaciones'] ?? $datos['observaciones'] ?? '');
 
             $evaluacion = null;
@@ -381,7 +359,7 @@ class ProyectoRepository {
                     'par_usuario_id'         => $parUsuarioId,
                     'etapa_evaluada'         => $etapaEval,
                     'ronda'                  => $maxRonda > 0 ? $maxRonda : 1,
-                    'fecha_asignacion'       => $proyecto->fecha_asignacion_pares ?? date('Y-m-d'),
+                    'fecha_asignacion'       => $proyecto->fecha_asignacion_pares ?? $fechaConcepto,
                     'fecha_concepto'         => $fechaConcepto,
                     'veredicto'              => $veredicto,
                     'concepto_observaciones' => $observaciones
@@ -399,6 +377,7 @@ class ProyectoRepository {
 
             $estadoAnterior = $proyecto->estado_actual;
 
+            
             $hayCorreccionesEnRonda = EvaluacionPar::where('proyecto_id', $proyecto->id)
                 ->where('ronda', $evaluacion->ronda)
                 ->where('veredicto', 'con_correcciones')
@@ -416,48 +395,25 @@ class ProyectoRepository {
             }
 
             HistorialTrazabilidad::create([
-                'proyecto_id'       => $proyecto->id,
-                'etapa'             => $proyecto->etapa_actual,
-                'estado_anterior'   => $estadoAnterior,
-                'estado_nuevo'      => $proyecto->estado_actual,
-                'actor_id'          => $parUsuarioId,
-                'tipo_evento'       => 'concepto_par',
-                'observaciones'     => $textoTraza,
-                'version_documento' => $proyecto->version_documento,
-                'archivo_pdf_url'   => $proyecto->documento_actual_url,
-                'fecha_evento'      => date('Y-m-d H:i:s')
+                'proyecto_id'     => $proyecto->id,
+                'etapa'           => $proyecto->etapa_actual,
+                'estado_anterior' => $estadoAnterior,
+                'estado_nuevo'    => $proyecto->estado_actual,
+                'actor_id'        => $parUsuarioId,
+                'tipo_evento'     => 'concepto_par',
+                'observaciones'   => $textoTraza,
+                'fecha_evento'    => $fechaEvento
             ]);
 
             return $this->obtenerPorId($proyecto->id);
         });
     }
 
-    public function subsanar(int $id, array $datos, ?array $archivoSubido = null) {
-        return DB::transaction(function () use ($id, $datos, $archivoSubido) {
+    public function subsanar(int $id, array $datos) {
+        return DB::transaction(function () use ($id, $datos) {
             $proyecto = Proyecto::findOrFail($id);
             $estadoAnterior = $proyecto->estado_actual;
-            $versionAnterior = (int)$proyecto->version_documento;
-            $urlAnterior = $proyecto->documento_actual_url ?: "docs/proyecto{$proyecto->id}_v{$versionAnterior}.pdf";
-
-            $existeVersionAnterior = HistorialTrazabilidad::where('proyecto_id', $proyecto->id)
-                ->where('version_documento', $versionAnterior)
-                ->exists();
-
-            if (!$existeVersionAnterior) {
-                $this->asegurarArchivoPdf($urlAnterior, $proyecto->titulo, $versionAnterior, 'Version previa archivada');
-                HistorialTrazabilidad::create([
-                    'proyecto_id'       => $proyecto->id,
-                    'etapa'             => $proyecto->etapa_actual,
-                    'estado_anterior'   => $estadoAnterior,
-                    'estado_nuevo'      => $estadoAnterior,
-                    'actor_id'          => (int)$proyecto->investigador_principal_id,
-                    'tipo_evento'       => 'radicacion_inicial',
-                    'observaciones'     => "Respaldo histórico de versión v{$versionAnterior} previo a subsanación.",
-                    'version_documento' => $versionAnterior,
-                    'archivo_pdf_url'   => $urlAnterior,
-                    'fecha_evento'      => date('Y-m-d H:i:s', time() - 60)
-                ]);
-            }
+            $fechaEvento = $this->normalizarFechaEvento($datos['fecha_evento'] ?? $datos['fecha_movimiento'] ?? null);
 
             if (!empty($datos['titulo'])) {
                 $proyecto->titulo = trim($datos['titulo']);
@@ -472,27 +428,7 @@ class ProyectoRepository {
                 $proyecto->sublinea_id = (int)$datos['sublinea_id'];
             }
 
-            $nuevaVersion = $versionAnterior + 1;
-            $nuevoPdfUrl = "docs/proyecto{$proyecto->id}_v{$nuevaVersion}.pdf";
-
-            if ($archivoSubido && isset($archivoSubido['tmp_name']) && is_uploaded_file($archivoSubido['tmp_name'])) {
-                $publicDir = dirname(__DIR__, 2) . '/public/docs';
-                if (!is_dir($publicDir)) {
-                    mkdir($publicDir, 0777, true);
-                }
-                move_uploaded_file($archivoSubido['tmp_name'], $publicDir . "/proyecto{$proyecto->id}_v{$nuevaVersion}.pdf");
-            } else {
-                $this->asegurarArchivoPdf(
-                    $nuevoPdfUrl,
-                    $proyecto->titulo,
-                    $nuevaVersion,
-                    $datos['observaciones'] ?? "Subsanacion version v{$nuevaVersion}"
-                );
-            }
-
-            $proyecto->version_documento = $nuevaVersion;
-            $proyecto->documento_actual_url = $nuevoPdfUrl;
-
+            
             if ($estadoAnterior === 'novedad_cipade' || $proyecto->etapa_actual === 'desarrollo') {
                 $estadoNuevo = 'en_desarrollo';
             } else {
@@ -505,20 +441,18 @@ class ProyectoRepository {
             $actorId = (int)($datos['actor_id'] ?? $proyecto->investigador_principal_id);
             $observaciones = trim($datos['observaciones'] ?? '');
             if ($observaciones === '') {
-                $observaciones = "Se cargó nueva versión v{$nuevaVersion} con ajustes aplicados (versión previa v{$versionAnterior} conservada en historial: {$urlAnterior}).";
+                $observaciones = 'Los investigadores subsanaron las observaciones y remitieron los soportes por correo institucional.';
             }
 
             HistorialTrazabilidad::create([
-                'proyecto_id'       => $proyecto->id,
-                'etapa'             => $proyecto->etapa_actual,
-                'estado_anterior'   => $estadoAnterior,
-                'estado_nuevo'      => $estadoNuevo,
-                'actor_id'          => $actorId,
-                'tipo_evento'       => 'subsanacion_investigador',
-                'observaciones'     => $observaciones,
-                'version_documento' => $nuevaVersion,
-                'archivo_pdf_url'   => $nuevoPdfUrl,
-                'fecha_evento'      => date('Y-m-d H:i:s')
+                'proyecto_id'     => $proyecto->id,
+                'etapa'           => $proyecto->etapa_actual,
+                'estado_anterior' => $estadoAnterior,
+                'estado_nuevo'    => $estadoNuevo,
+                'actor_id'        => $actorId,
+                'tipo_evento'     => 'subsanacion_investigador',
+                'observaciones'   => $observaciones,
+                'fecha_evento'    => $fechaEvento
             ]);
 
             return $this->obtenerPorId($proyecto->id);

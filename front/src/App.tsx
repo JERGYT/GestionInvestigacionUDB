@@ -55,10 +55,17 @@ export function App() {
       {vistaActual === 'gestion' && (
         <GestionProyectos
           proyectos={proyectos}
+          catalogos={catalogos}
           seleccionado={seleccionado}
           setSeleccionado={setSeleccionado}
           setVistaActual={setVistaActual}
           rolActual={rolActual}
+          onProyectoActualizado={(proyectoActualizado) => {
+            if (proyectoActualizado) {
+              setSeleccionado(proyectoActualizado);
+            }
+            void cargarProyectos(proyectoActualizado?.id ?? seleccionado?.id);
+          }}
         />
       )}
 
@@ -75,7 +82,7 @@ export function App() {
 
       {vistaActual === 'evaluacion' && seleccionado && (
         <DictamenComite
-          key={`${seleccionado.id}-${seleccionado.version_documento}-${seleccionado.estado_actual}`}
+          key={`${seleccionado.id}-${seleccionado.rondas_revision}-${seleccionado.estado_actual}`}
           proyecto={seleccionado}
           catalogos={catalogos}
           rolActual={rolActual}
@@ -94,6 +101,7 @@ export function App() {
       {vistaActual === 'seguimiento' && seleccionado && (
         <SeguimientoAvances
           proyecto={seleccionado}
+          catalogos={catalogos}
           onActualizado={(proyectoActualizado) => {
             if (proyectoActualizado) {
               setSeleccionado(proyectoActualizado);

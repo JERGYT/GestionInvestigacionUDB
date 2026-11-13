@@ -14,8 +14,6 @@ class HistorialTrazabilidad extends Model {
         'actor_id',
         'tipo_evento',
         'observaciones',
-        'version_documento',
-        'archivo_pdf_url',
         'fecha_evento'
     ];
 

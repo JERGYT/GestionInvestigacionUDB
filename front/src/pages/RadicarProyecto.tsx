@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import type { Catalogos } from '../types';
 import { proyectosService } from '../services/proyectos';
-import { Upload, Users, FileCheck2 } from 'lucide-react';
+import { Users, Calendar, MailCheck } from 'lucide-react';
 
 interface Props {
   catalogos: Catalogos;
@@ -16,10 +16,12 @@ export const RadicarProyecto: React.FC<Props> = ({ catalogos, onRadicado, onCanc
   const [sublineaId, setSublineaId] = useState<number>(catalogos.sublineas[0]?.id ?? 1);
   const [principalId, setPrincipalId] = useState<number>(2);
   const [coinvestigadoresIds, setCoinvestigadoresIds] = useState<number[]>([3]);
-  const [observaciones, setObservaciones] = useState(
-    'Radicación inicial de propuesta de investigación docente en formato institucional.'
+  const [fechaRadicacion, setFechaRadicacion] = useState(
+    new Date().toISOString().slice(0, 10)
   );
-  const [archivoPdf, setArchivoPdf] = useState<File | null>(null);
+  const [observaciones, setObservaciones] = useState(
+    'Radicación inicial de propuesta docente enviada por correo institucional para revisión del Líder de Grupo.'
+  );
   const [enviando, setEnviando] = useState(false);
   const [mensajeError, setMensajeError] = useState<string | null>(null);
 
@@ -54,30 +56,17 @@ export const RadicarProyecto: React.FC<Props> = ({ catalogos, onRadicado, onCanc
     setEnviando(true);
     try {
       const coIdsLimpiados = coinvestigadoresIds.filter((id) => id !== principalId);
-      let respuesta;
-
-      if (archivoPdf) {
-        const formData = new FormData();
-        formData.append('titulo', titulo.trim());
-        formData.append('resumen', resumen.trim());
-        formData.append('linea_id', String(lineaId));
-        formData.append('sublinea_id', String(sublineaId));
-        formData.append('investigador_principal_id', String(principalId));
-        formData.append('coinvestigadores_ids', JSON.stringify(coIdsLimpiados));
-        formData.append('observaciones', observaciones.trim());
-        formData.append('archivo_pdf', archivoPdf);
-        respuesta = await proyectosService.radicar(formData);
-      } else {
-        respuesta = await proyectosService.radicar({
-          titulo: titulo.trim(),
-          resumen: resumen.trim(),
-          linea_id: lineaId,
-          sublinea_id: sublineaId,
-          investigador_principal_id: principalId,
-          coinvestigadores_ids: coIdsLimpiados,
-          observaciones: observaciones.trim()
-        });
-      }
+      const respuesta = await proyectosService.radicar({
+        titulo: titulo.trim(),
+        resumen: resumen.trim(),
+        linea_id: lineaId,
+        sublinea_id: sublineaId,
+        investigador_principal_id: principalId,
+        coinvestigadores_ids: coIdsLimpiados,
+        fecha_radicacion: fechaRadicacion,
+        fecha_evento: fechaRadicacion,
+        observaciones: observaciones.trim()
+      });
 
       if (respuesta.error) {
         setMensajeError(respuesta.error);
@@ -94,17 +83,20 @@ export const RadicarProyecto: React.FC<Props> = ({ catalogos, onRadicado, onCanc
       style={{
         maxWidth: '780px',
         margin: '0 auto',
-        backgroundColor: '#1e293b',
+        backgroundColor: '#FFFFFF',
         padding: '32px',
         borderRadius: '10px',
-        border: '1px solid #334155'
+        border: '1px solid #E5E7EB',
+        borderTop: '4px solid #C8102E',
+        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)'
       }}
     >
       <div style={{ marginBottom: '22px' }}>
         <span
           style={{
-            backgroundColor: '#0c4a6e',
-            color: '#38bdf8',
+            backgroundColor: '#FEF9E7',
+            color: '#8A6A10',
+            border: '1px solid #C59B27',
             padding: '4px 10px',
             borderRadius: '999px',
             fontSize: '11px',
@@ -114,24 +106,25 @@ export const RadicarProyecto: React.FC<Props> = ({ catalogos, onRadicado, onCanc
         >
           Modalidad Exclusiva: Proyecto Docente
         </span>
-        <h2 style={{ fontSize: '22px', margin: '10px 0 6px 0' }}>
+        <h2 style={{ fontSize: '22px', margin: '10px 0 6px 0', color: '#1F2937' }}>
           Radicar Nuevo Proyecto de Investigación Docente
         </h2>
-        <p style={{ color: '#94a3b8', fontSize: '13px', margin: 0 }}>
+        <p style={{ color: '#4B5563', fontSize: '13px', margin: 0 }}>
           El proyecto se radicará en etapa de <strong>Idea</strong> con estado inicial{' '}
-          <strong style={{ color: '#38bdf8' }}>En Revisión Líder</strong> y generará automáticamente el primer registro en el historial de trazabilidad (Documento PDF <strong>v1</strong>).
+          <strong style={{ color: '#92400E' }}>En Revisión Líder</strong>, dejando constancia de la fecha exacta de radicación y del soporte enviado por correo institucional.
         </p>
       </div>
 
       {mensajeError && (
         <div
           style={{
-            backgroundColor: '#450a0a',
-            border: '1px solid #dc2626',
-            color: '#fecaca',
+            backgroundColor: '#FEE2E2',
+            border: '1px solid #C8102E',
+            color: '#9E0B22',
             padding: '12px 14px',
             borderRadius: '8px',
             fontSize: '13px',
+            fontWeight: 600,
             marginBottom: '16px'
           }}
         >
@@ -141,7 +134,7 @@ export const RadicarProyecto: React.FC<Props> = ({ catalogos, onRadicado, onCanc
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
         <div>
-          <label style={{ display: 'block', fontSize: '12px', color: '#cbd5e1', marginBottom: '6px', fontWeight: 600 }}>
+          <label style={{ display: 'block', fontSize: '12px', color: '#374151', marginBottom: '6px', fontWeight: 600 }}>
             Título del Proyecto Docente *
           </label>
           <input
@@ -151,11 +144,11 @@ export const RadicarProyecto: React.FC<Props> = ({ catalogos, onRadicado, onCanc
             placeholder="Ej: Plataforma Inteligente para Monitoreo Hidrológico en Boyacá..."
             style={{
               width: '100%',
-              backgroundColor: '#0f172a',
-              border: '1px solid #334155',
+              backgroundColor: '#FFFFFF',
+              border: '1px solid #D1D5DB',
               borderRadius: '6px',
               padding: '11px 12px',
-              color: '#fff',
+              color: '#1F2937',
               fontSize: '13.5px'
             }}
             required
@@ -163,7 +156,7 @@ export const RadicarProyecto: React.FC<Props> = ({ catalogos, onRadicado, onCanc
         </div>
 
         <div>
-          <label style={{ display: 'block', fontSize: '12px', color: '#cbd5e1', marginBottom: '6px', fontWeight: 600 }}>
+          <label style={{ display: 'block', fontSize: '12px', color: '#374151', marginBottom: '6px', fontWeight: 600 }}>
             Resumen Ejecutivo y Alcance *
           </label>
           <textarea
@@ -173,11 +166,11 @@ export const RadicarProyecto: React.FC<Props> = ({ catalogos, onRadicado, onCanc
             placeholder="Describa el problema de investigación, metodología propuesta y resultados esperados..."
             style={{
               width: '100%',
-              backgroundColor: '#0f172a',
-              border: '1px solid #334155',
+              backgroundColor: '#FFFFFF',
+              border: '1px solid #D1D5DB',
               borderRadius: '6px',
               padding: '10px 12px',
-              color: '#fff',
+              color: '#1F2937',
               fontSize: '13px'
             }}
             required
@@ -186,7 +179,7 @@ export const RadicarProyecto: React.FC<Props> = ({ catalogos, onRadicado, onCanc
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
           <div>
-            <label style={{ display: 'block', fontSize: '12px', color: '#cbd5e1', marginBottom: '6px', fontWeight: 600 }}>
+            <label style={{ display: 'block', fontSize: '12px', color: '#374151', marginBottom: '6px', fontWeight: 600 }}>
               Línea de Investigación *
             </label>
             <select
@@ -194,11 +187,11 @@ export const RadicarProyecto: React.FC<Props> = ({ catalogos, onRadicado, onCanc
               onChange={(e) => handleCambioLinea(Number(e.target.value))}
               style={{
                 width: '100%',
-                backgroundColor: '#0f172a',
-                border: '1px solid #334155',
+                backgroundColor: '#FFFFFF',
+                border: '1px solid #D1D5DB',
                 borderRadius: '6px',
                 padding: '10px 12px',
-                color: '#fff',
+                color: '#1F2937',
                 fontSize: '13px'
               }}
             >
@@ -211,7 +204,7 @@ export const RadicarProyecto: React.FC<Props> = ({ catalogos, onRadicado, onCanc
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: '12px', color: '#cbd5e1', marginBottom: '6px', fontWeight: 600 }}>
+            <label style={{ display: 'block', fontSize: '12px', color: '#374151', marginBottom: '6px', fontWeight: 600 }}>
               Sublínea de Investigación *
             </label>
             <select
@@ -219,11 +212,11 @@ export const RadicarProyecto: React.FC<Props> = ({ catalogos, onRadicado, onCanc
               onChange={(e) => setSublineaId(Number(e.target.value))}
               style={{
                 width: '100%',
-                backgroundColor: '#0f172a',
-                border: '1px solid #334155',
+                backgroundColor: '#FFFFFF',
+                border: '1px solid #D1D5DB',
                 borderRadius: '6px',
                 padding: '10px 12px',
-                color: '#fff',
+                color: '#1F2937',
                 fontSize: '13px'
               }}
             >
@@ -239,21 +232,21 @@ export const RadicarProyecto: React.FC<Props> = ({ catalogos, onRadicado, onCanc
         {/* Conformación del Equipo Docente */}
         <div
           style={{
-            backgroundColor: '#0f172a',
+            backgroundColor: '#F9FAFB',
             padding: '18px',
             borderRadius: '8px',
-            border: '1px solid #334155',
+            border: '1px solid #E5E7EB',
             display: 'flex',
             flexDirection: 'column',
             gap: '14px'
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#38bdf8', fontSize: '13px', fontWeight: 700 }}>
-            <Users size={17} /> Conformación del Equipo de Investigadores Docentes
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#1F2937', fontSize: '13px', fontWeight: 700 }}>
+            <Users size={17} color="#C8102E" /> Conformación del Equipo de Investigadores Docentes
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: '12px', color: '#94a3b8', marginBottom: '6px' }}>
+            <label style={{ display: 'block', fontSize: '12px', color: '#4B5563', fontWeight: 600, marginBottom: '6px' }}>
               Investigador Principal (Docente Responsable) *
             </label>
             <select
@@ -265,11 +258,11 @@ export const RadicarProyecto: React.FC<Props> = ({ catalogos, onRadicado, onCanc
               }}
               style={{
                 width: '100%',
-                backgroundColor: '#1e293b',
-                border: '1px solid #334155',
+                backgroundColor: '#FFFFFF',
+                border: '1px solid #D1D5DB',
                 borderRadius: '6px',
                 padding: '10px 12px',
-                color: '#fff',
+                color: '#1F2937',
                 fontSize: '13px'
               }}
             >
@@ -282,7 +275,7 @@ export const RadicarProyecto: React.FC<Props> = ({ catalogos, onRadicado, onCanc
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: '12px', color: '#94a3b8', marginBottom: '8px' }}>
+            <label style={{ display: 'block', fontSize: '12px', color: '#4B5563', fontWeight: 600, marginBottom: '8px' }}>
               Asociar Co-investigadores Docentes (Opcional):
             </label>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
@@ -298,8 +291,8 @@ export const RadicarProyecto: React.FC<Props> = ({ catalogos, onRadicado, onCanc
                         alignItems: 'center',
                         gap: '10px',
                         padding: '10px 12px',
-                        backgroundColor: seleccionado ? '#1e3a5f' : '#1e293b',
-                        border: seleccionado ? '1px solid #0284c7' : '1px solid #334155',
+                        backgroundColor: seleccionado ? '#FEF2F2' : '#FFFFFF',
+                        border: seleccionado ? '1px solid #C8102E' : '1px solid #D1D5DB',
                         borderRadius: '6px',
                         cursor: 'pointer',
                         fontSize: '12.5px'
@@ -311,8 +304,8 @@ export const RadicarProyecto: React.FC<Props> = ({ catalogos, onRadicado, onCanc
                         onChange={() => toggleCoinvestigador(doc.id)}
                       />
                       <div>
-                        <div style={{ fontWeight: 600, color: '#f8fafc' }}>{doc.nombre}</div>
-                        <div style={{ fontSize: '11px', color: '#94a3b8' }}>{doc.email}</div>
+                        <div style={{ fontWeight: 600, color: '#1F2937' }}>{doc.nombre}</div>
+                        <div style={{ fontSize: '11px', color: '#6B7280' }}>{doc.email}</div>
                       </div>
                     </label>
                   );
@@ -321,82 +314,89 @@ export const RadicarProyecto: React.FC<Props> = ({ catalogos, onRadicado, onCanc
           </div>
         </div>
 
-        <div>
-          <label style={{ display: 'block', fontSize: '12px', color: '#cbd5e1', marginBottom: '6px', fontWeight: 600 }}>
-            Observaciones de Radicación (Registro en Trazabilidad)
-          </label>
-          <input
-            type="text"
-            value={observaciones}
-            onChange={(e) => setObservaciones(e.target.value)}
-            style={{
-              width: '100%',
-              backgroundColor: '#0f172a',
-              border: '1px solid #334155',
-              borderRadius: '6px',
-              padding: '10px 12px',
-              color: '#fff',
-              fontSize: '13px'
-            }}
-          />
-        </div>
+        {/* Fecha del Movimiento y Soporte de Correo/Reunión */}
+        <div
+          style={{
+            backgroundColor: '#FEF9E7',
+            padding: '18px',
+            borderRadius: '8px',
+            border: '1px solid #C59B27',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '14px'
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#8A6A10', fontSize: '13px', fontWeight: 700 }}>
+              <MailCheck size={17} color="#C59B27" /> Registro de Fecha y Soporte en Historial de Trazabilidad
+            </div>
 
-        <div>
-          <label style={{ display: 'block', fontSize: '12px', color: '#cbd5e1', marginBottom: '6px', fontWeight: 600 }}>
-            Documento Soporte en PDF (Versión Inicial v1) *
-          </label>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '12px',
-              backgroundColor: '#0f172a',
-              padding: '14px',
-              borderRadius: '8px',
-              border: '1px dashed #0284c7'
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <Upload size={20} color="#38bdf8" />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Calendar size={15} color="#8A6A10" />
+              <label style={{ fontSize: '12px', color: '#1F2937', fontWeight: 600 }}>
+                Fecha del movimiento (Radicación) *
+              </label>
               <input
-                type="file"
-                accept=".pdf"
-                onChange={(e) => setArchivoPdf(e.target.files?.[0] ?? null)}
-                style={{ color: '#cbd5e1', fontSize: '12.5px' }}
+                type="date"
+                value={fechaRadicacion}
+                onChange={(e) => setFechaRadicacion(e.target.value)}
+                style={{
+                  backgroundColor: '#FFFFFF',
+                  color: '#1F2937',
+                  border: '1px solid #D1D5DB',
+                  borderRadius: '6px',
+                  padding: '7px 10px',
+                  fontSize: '12.5px'
+                }}
+                required
               />
             </div>
-            <span style={{ fontSize: '11px', color: '#34d399', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <FileCheck2 size={15} /> Se registrará como v1
-            </span>
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '12px', color: '#374151', marginBottom: '6px', fontWeight: 600 }}>
+              Observaciones / Soporte de Correo Institucional o Reunión *
+            </label>
+            <textarea
+              rows={3}
+              value={observaciones}
+              onChange={(e) => setObservaciones(e.target.value)}
+              placeholder="Ej: Se recibió propuesta por correo institucional el 3 de noviembre y se asigna a revisión del Líder de Grupo..."
+              style={{
+                width: '100%',
+                backgroundColor: '#FFFFFF',
+                border: '1px solid #D1D5DB',
+                borderRadius: '6px',
+                padding: '10px 12px',
+                color: '#1F2937',
+                fontSize: '13px'
+              }}
+              required
+            />
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+        <div style={{ display: 'flex', gap: '12px', marginTop: '6px' }}>
           <button
             type="submit"
             disabled={enviando}
+            className="ub-btn-primary"
             style={{
               flex: 1,
-              backgroundColor: '#0284c7',
-              color: '#fff',
-              border: 'none',
               padding: '12px',
               borderRadius: '8px',
-              fontWeight: 'bold',
+              fontWeight: 700,
               cursor: enviando ? 'wait' : 'pointer',
               fontSize: '13.5px'
             }}
           >
-            {enviando ? 'Radicando Proyecto Docente...' : 'Radicar Proyecto y Enviar a Revisión Líder'}
+            {enviando ? 'Radicando Proyecto Docente...' : 'Radicar Proyecto y Registrar en Historial'}
           </button>
           <button
             type="button"
             onClick={onCancelar}
+            className="ub-btn-neutral"
             style={{
-              backgroundColor: '#334155',
-              color: '#cbd5e1',
-              border: 'none',
               padding: '12px 22px',
               borderRadius: '8px',
               cursor: 'pointer',

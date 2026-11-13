@@ -1,5 +1,5 @@
 import React from 'react';
-import { FolderGit2, PlusCircle, CheckSquare, History, GraduationCap, UserCheck } from 'lucide-react';
+import { FolderGit2, PlusCircle, CheckSquare, History, UserCheck } from 'lucide-react';
 import type { RolUsuario } from '../types';
 import { ROLES_METADATA } from '../types';
 
@@ -28,7 +28,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'gestion', label: 'Proyectos Docentes', icon: FolderGit2 },
     { id: 'radicar', label: 'Radicar Proyecto', icon: PlusCircle },
     { id: 'evaluacion', label: 'Flujo, Pares y Subsanación', icon: CheckSquare },
-    { id: 'seguimiento', label: 'Trazabilidad y Versiones', icon: History },
+    { id: 'seguimiento', label: 'Historial de Trazabilidad', icon: History },
   ];
 
   const roles: RolUsuario[] = ['docente', 'lider_grupo', 'comite', 'par_evaluador'];
@@ -38,31 +38,55 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <aside
       style={{
         width: '285px',
-        backgroundColor: '#1e293b',
-        color: '#f8fafc',
+        backgroundColor: '#1C1C1E',
+        color: '#D1D5DB',
         display: 'flex',
         flexDirection: 'column',
         height: '100vh',
-        borderRight: '1px solid #334155',
+        borderRight: '1px solid #2E2E32',
         flexShrink: 0
       }}
     >
+      {/* Encabezado Institucional SiiUB */}
       <div
         style={{
-          padding: '22px 20px',
-          borderBottom: '1px solid #334155',
+          padding: '20px 18px',
+          borderBottom: '1px solid #2E2E32',
           display: 'flex',
           alignItems: 'center',
           gap: '12px'
         }}
       >
-        <GraduationCap size={32} color="#38bdf8" />
-        <div>
-          <h2 style={{ fontSize: '15px', fontWeight: 'bold', margin: 0, lineHeight: 1.2 }}>
-            Investigación UDB
+        <div
+          style={{
+            backgroundColor: '#C8102E',
+            color: '#FFFFFF',
+            fontWeight: 900,
+            fontSize: '15px',
+            letterSpacing: '0.04em',
+            padding: '8px 10px',
+            borderRadius: '6px',
+            borderBottom: '3px solid #C59B27',
+            lineHeight: 1,
+            flexShrink: 0
+          }}
+        >
+          UB
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <h2
+            style={{
+              fontSize: '13px',
+              fontWeight: 700,
+              margin: 0,
+              lineHeight: 1.3,
+              color: '#FFFFFF'
+            }}
+          >
+            UB | Universidad de Boyacá
           </h2>
-          <small style={{ color: '#94a3b8', fontSize: '11px' }}>
-            Proyectos Docentes · FIAD
+          <small style={{ color: '#C59B27', fontSize: '11px', fontWeight: 600, display: 'block', marginTop: '2px' }}>
+            Gestión Investigativa FIAD
           </small>
         </div>
       </div>
@@ -80,8 +104,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           style={{
             fontSize: '10px',
             textTransform: 'uppercase',
-            letterSpacing: '0.06em',
-            color: '#64748b',
+            letterSpacing: '0.07em',
+            color: '#9CA3AF',
             fontWeight: 700,
             padding: '0 8px 6px 8px'
           }}
@@ -95,6 +119,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <button
               key={item.id}
               onClick={() => setVistaActual(item.id)}
+              className={activo ? 'ub-nav-item-active' : 'ub-nav-item'}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -102,16 +127,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 padding: '12px 14px',
                 borderRadius: '8px',
                 border: 'none',
-                backgroundColor: activo ? '#0284c7' : 'transparent',
-                color: activo ? '#ffffff' : '#94a3b8',
                 fontSize: '13.5px',
-                fontWeight: activo ? '600' : '500',
+                fontWeight: activo ? 700 : 500,
                 cursor: 'pointer',
-                textAlign: 'left',
-                transition: 'all 0.15s ease'
+                textAlign: 'left'
               }}
             >
-              <Icon size={18} />
+              <Icon size={18} color={activo ? '#FFFFFF' : '#D1D5DB'} />
               {item.label}
             </button>
           );
@@ -123,9 +145,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
         style={{
           padding: '16px',
           margin: '12px',
-          backgroundColor: '#0f172a',
+          backgroundColor: '#27272A',
           borderRadius: '10px',
-          border: `1px solid ${metaRol.color}55`
+          border: '1px solid #3F3F46',
+          borderTop: `3px solid ${metaRol.accent}`
         }}
       >
         <div
@@ -137,10 +160,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
             fontSize: '11px',
             fontWeight: 700,
             textTransform: 'uppercase',
-            color: metaRol.color
+            color: '#C59B27'
           }}
         >
-          <UserCheck size={15} color={metaRol.color} />
+          <UserCheck size={15} color="#C59B27" />
           Selector de Rol (Simulación)
         </div>
 
@@ -150,9 +173,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
           onChange={(e) => setRolActual(e.target.value as RolUsuario)}
           style={{
             width: '100%',
-            backgroundColor: '#1e293b',
-            color: '#f8fafc',
-            border: '1px solid #334155',
+            backgroundColor: '#1C1C1E',
+            color: '#FFFFFF',
+            border: '1px solid #3F3F46',
             borderRadius: '6px',
             padding: '9px 10px',
             fontSize: '13px',
@@ -168,10 +191,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
           ))}
         </select>
 
-        <div style={{ fontSize: '11.5px', color: '#cbd5e1', marginBottom: '4px' }}>
-          Actor activo: <strong style={{ color: '#fff' }}>{metaRol.actorNombre}</strong>
+        <div style={{ fontSize: '11.5px', color: '#D1D5DB', marginBottom: '4px' }}>
+          Actor activo: <strong style={{ color: '#FFFFFF' }}>{metaRol.actorNombre}</strong>
         </div>
-        <div style={{ fontSize: '11px', color: '#94a3b8', lineHeight: 1.4 }}>
+        <div style={{ fontSize: '11px', color: '#9CA3AF', lineHeight: 1.4 }}>
           {metaRol.descripcion}
         </div>
       </div>

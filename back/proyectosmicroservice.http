@@ -6,7 +6,7 @@ Accept: application/json
 GET http://localhost/GestionInvestigacionUDB/back/ms-proyectos/public/index.php/view/proyectos
 Accept: application/json
 
-### 3. Radicar nuevo proyecto docente (Inicia en en_revision_lider + v1 en historial_trazabilidad)
+### 3. Radicar nuevo proyecto docente (Inicia en en_revision_lider con fecha y soporte de correo)
 POST http://localhost/GestionInvestigacionUDB/back/ms-proyectos/public/index.php/view/proyectos
 Content-Type: application/json
 
@@ -17,17 +17,19 @@ Content-Type: application/json
     "sublinea_id": 1,
     "investigador_principal_id": 2,
     "coinvestigadores_ids": [3],
-    "observaciones": "Radicación inicial de propuesta docente en formato institucional."
+    "fecha_radicacion": "2026-11-03",
+    "observaciones": "Radicación inicial remitida por correo institucional el 3 de noviembre."
 }
 
-### 4. Transición de estado (Líder de Grupo: devolver_lider | aval_lider, Comité: asignar_pares | aprobar_facultad | iniciar_desarrollo, CIPADE: novedad_cipade)
+### 4. Transición de estado (Líder: devolver_lider | aval_lider, Comité: asignar_pares | aprobar_facultad | iniciar_desarrollo, CIPADE: novedad_cipade, Equipo: cambio_equipo)
 POST http://localhost/GestionInvestigacionUDB/back/ms-proyectos/public/index.php/view/proyectos/1/transicion
 Content-Type: application/json
 
 {
     "accion": "aval_lider",
     "actor_id": 1,
-    "observaciones": "La propuesta cumple con los ajustes solicitados en reunión del grupo de investigación. Se remite al Comité FIAD."
+    "fecha_evento": "2026-11-11",
+    "observaciones": "La propuesta cumple con los ajustes solicitados por correo. Se remite al Comité FIAD."
 }
 
 ### 5. Registrar concepto de Par Evaluador (Si al menos uno es con_correcciones, devuelve a en_revision_investigadores)
@@ -37,16 +39,18 @@ Content-Type: application/json
 {
     "par_usuario_id": 6,
     "veredicto": "con_correcciones",
+    "fecha_concepto": "2026-11-12",
     "concepto_observaciones": "Se requiere detallar el protocolo de validación estadística del modelo predictivo."
 }
 
-### 6. Subsanar proyecto devuelto con observaciones (Actualiza título/resumen, incrementa version_documento y guarda historial)
+### 6. Subsanar proyecto devuelto con observaciones (Actualiza título/resumen, registra fecha del movimiento y soporte en historial)
 POST http://localhost/GestionInvestigacionUDB/back/ms-proyectos/public/index.php/view/proyectos/3/subsanar
 Content-Type: application/json
 
 {
     "actor_id": 2,
     "titulo": "Red de Sensores IoT para Calidad del Aire en Tunja",
-    "resumen": "Despliegue de nodos sensores de bajo costo con acta de propiedad intelectual anexa.",
-    "observaciones": "Se anexa el acta de propiedad intelectual firmada por los investigadores docentes según requerimiento de CIPADE."
+    "resumen": "Despliegue de nodos sensores de bajo costo con acta de propiedad intelectual remitida por correo.",
+    "fecha_evento": "2026-11-13",
+    "observaciones": "Se envió por correo institucional el acta de propiedad intelectual firmada por los investigadores según requerimiento de CIPADE."
 }

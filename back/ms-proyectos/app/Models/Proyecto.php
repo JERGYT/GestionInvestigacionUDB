@@ -16,9 +16,7 @@ class Proyecto extends Model {
         'estado_actual',
         'rondas_revision',
         'fecha_radicacion',
-        'fecha_asignacion_pares',
-        'documento_actual_url',
-        'version_documento'
+        'fecha_asignacion_pares'
     ];
 
     public function linea() {
@@ -34,7 +32,9 @@ class Proyecto extends Model {
     }
 
     public function equipo() {
-        return $this->hasMany(ProyectoInvestigador::class, 'proyecto_id');
+        return $this->hasMany(ProyectoInvestigador::class, 'proyecto_id')
+            ->orderBy('activo', 'desc')
+            ->orderBy('id', 'asc');
     }
 
     public function trazabilidad() {

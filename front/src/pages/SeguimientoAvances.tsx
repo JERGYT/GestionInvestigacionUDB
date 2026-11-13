@@ -1,24 +1,25 @@
-import React, { useMemo, useState } from 'react';
-import { ESTADOS_METADATA, type Proyecto } from '../types';
-import { obtenerUrlPdf, proyectosService } from '../services/proyectos';
+import React, { useState } from 'react';
+import { ESTADOS_METADATA, type Catalogos, type Proyecto } from '../types';
+import { proyectosService } from '../services/proyectos';
 import {
   BadgeEstado,
   BadgeEtapa,
   BadgeEvento
 } from '../components/ui/Badge';
 import {
-  FileText,
-  Download,
   Clock,
   AlertOctagon,
   ArrowRight,
   RefreshCw,
   CheckSquare,
-  Table as TableIcon
+  Table as TableIcon,
+  Users,
+  Calendar
 } from 'lucide-react';
 
 interface Props {
   proyecto: Proyecto;
+  catalogos: Catalogos;
   onActualizado: (proyectoActualizado?: Proyecto) => void;
   onIrASubsanar: () => void;
   onVolver: () => void;
@@ -26,50 +27,29 @@ interface Props {
 
 export const SeguimientoAvances: React.FC<Props> = ({
   proyecto,
+  catalogos,
   onActualizado,
   onIrASubsanar,
   onVolver
 }) => {
+  const fechaHoy = new Date().toISOString().slice(0, 10);
+
+  // Estado para Novedad CIPADE
+  const [fechaCipade, setFechaCipade] = useState(fechaHoy);
   const [obsCipade, setObsCipade] = useState('');
   const [registrandoCipade, setRegistrandoCipade] = useState(false);
 
-  const versionesPdf = useMemo(() => {
-    const mapa = new Map<
-      number,
-      { version: number; url: string; fecha: string; actor: string; nota: string }
-    >();
-
-
-
-    const trazaOrdenada = [...proyecto.trazabilidad].reverse();
-    for (const item of trazaOrdenada) {
-      if (item.version_documento && item.archivo_pdf_url) {
-        if (!mapa.has(item.version_documento)) {
-          mapa.set(item.version_documento, {
-            version: item.version_documento,
-            url: item.archivo_pdf_url,
-            fecha: item.fecha_evento,
-            actor: item.actor_nombre,
-            nota: item.observaciones
-          });
-        }
-      }
-    }
-
-    if (proyecto.version_documento && proyecto.documento_actual_url) {
-      if (!mapa.has(proyecto.version_documento)) {
-        mapa.set(proyecto.version_documento, {
-          version: proyecto.version_documento,
-          url: proyecto.documento_actual_url,
-          fecha: proyecto.fecha_radicacion,
-          actor: proyecto.investigador_principal,
-          nota: 'Versión vigente del proyecto'
-        });
-      }
-    }
-
-    return Array.from(mapa.values()).sort((a, b) => b.version - a.version);
-  }, [proyecto]);
+  // Estado para Cambio en el Equipo Docente
+  const [tipoCambioEquipo, setTipoCambioEquipo] = useState<'vincular' | 'retirar'>('vincular');
+  const [usuarioEquipoId, setUsuarioEquipoId] = useState<number>(
+    catalogos.docentes[0]?.id ?? 3
+  );
+  const [rolEquipoNuevo, setRolEquipoNuevo] = useState<'coinvestigador' | 'codirector'>(
+    'coinvestigador'
+  );
+  const [fechaCambioEquipo, setFechaCambioEquipo] = useState(fechaHoy);
+  const [obsCambioEquipo, setObsCambioEquipo] = useState('');
+  const [registrandoEquipo, setRegistrandoEquipo] = useState(false);
 
   const handleCrearNovedadCipade = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,11 +58,38 @@ export const SeguimientoAvances: React.FC<Props> = ({
     const res = await proyectosService.transicion(proyecto.id, {
       accion: 'novedad_cipade',
       actor_id: 1,
+      fecha_evento: fechaCipade,
       observaciones: obsCipade.trim()
     });
     setRegistrandoCipade(false);
     if (!res.error) {
       setObsCipade('');
+      onActualizado(res.data);
+    }
+  };
+
+  const handleCambioEquipo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setRegistrandoEquipo(true);
+    const payload: Record<string, unknown> = {
+      accion: 'cambio_equipo',
+      actor_id: 1,
+      fecha_cambio: fechaCambioEquipo,
+      fecha_evento: fechaCambioEquipo,
+      observaciones: obsCambioEquipo.trim()
+    };
+
+    if (tipoCambioEquipo === 'vincular') {
+      payload.nuevo_usuario_id = usuarioEquipoId;
+      payload.rol_equipo = rolEquipoNuevo;
+    } else {
+      payload.retirar_usuario_id = usuarioEquipoId;
+    }
+
+    const res = await proyectosService.transicion(proyecto.id, payload);
+    setRegistrandoEquipo(false);
+    if (!res.error) {
+      setObsCambioEquipo('');
       onActualizado(res.data);
     }
   };
@@ -98,10 +105,12 @@ export const SeguimientoAvances: React.FC<Props> = ({
       {/* Cabecera de Trazabilidad */}
       <div
         style={{
-          backgroundColor: '#1e293b',
+          backgroundColor: '#FFFFFF',
           padding: '24px 28px',
           borderRadius: '10px',
-          border: '1px solid #334155',
+          border: '1px solid #E5E7EB',
+          borderTop: '4px solid #C8102E',
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'flex-start',
@@ -110,18 +119,18 @@ export const SeguimientoAvances: React.FC<Props> = ({
         }}
       >
         <div>
-          <span style={{ fontSize: '11px', color: '#38bdf8', fontWeight: 700, textTransform: 'uppercase' }}>
-            Auditoría e Historial de Trazabilidad · Proyecto Docente #{proyecto.id}
+          <span style={{ fontSize: '11px', color: '#C8102E', fontWeight: 700, textTransform: 'uppercase' }}>
+            Auditoría de Estados, Fechas e Historial · Proyecto Docente #{proyecto.id}
           </span>
-          <h2 style={{ fontSize: '21px', margin: '6px 0 10px 0' }}>{proyecto.titulo}</h2>
+          <h2 style={{ fontSize: '21px', margin: '6px 0 10px 0', color: '#1F2937' }}>{proyecto.titulo}</h2>
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
             <BadgeEstado estado={proyecto.estado_actual} />
             <BadgeEtapa etapa={proyecto.etapa_actual} />
             <span
               style={{
-                backgroundColor: '#0f172a',
-                border: '1px solid #475569',
-                color: '#fbbf24',
+                backgroundColor: '#FEF9E7',
+                border: '1px solid #C59B27',
+                color: '#8A6A10',
                 padding: '4px 10px',
                 borderRadius: '6px',
                 fontSize: '11.5px',
@@ -131,31 +140,17 @@ export const SeguimientoAvances: React.FC<Props> = ({
                 gap: '5px'
               }}
             >
-              <RefreshCw size={12} /> Rondas de revisión: {proyecto.rondas_revision}
-            </span>
-            <span
-              style={{
-                backgroundColor: '#0c4a6e',
-                color: '#38bdf8',
-                padding: '4px 10px',
-                borderRadius: '6px',
-                fontSize: '11.5px',
-                fontWeight: 700
-              }}
-            >
-              Versión vigente: v{proyecto.version_documento}
+              <RefreshCw size={12} color="#C59B27" /> Rondas de revisión: {proyecto.rondas_revision}
             </span>
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '10px' }}>
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
           <button
             type="button"
             onClick={onIrASubsanar}
+            className="ub-btn-primary"
             style={{
-              backgroundColor: '#0284c7',
-              color: '#fff',
-              border: 'none',
               padding: '9px 14px',
               borderRadius: '6px',
               cursor: 'pointer',
@@ -166,15 +161,13 @@ export const SeguimientoAvances: React.FC<Props> = ({
               gap: '6px'
             }}
           >
-            <CheckSquare size={15} /> Gestionar Estado / Subsanar
+            <CheckSquare size={15} /> Cambiar Estado / Evaluar / Subsanar
           </button>
           <button
             type="button"
             onClick={onVolver}
+            className="ub-btn-neutral"
             style={{
-              backgroundColor: '#334155',
-              color: '#f8fafc',
-              border: 'none',
               padding: '9px 16px',
               borderRadius: '6px',
               cursor: 'pointer',
@@ -187,127 +180,226 @@ export const SeguimientoAvances: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* Bloque 1: Repositorio de Versiones de PDF + Creación rápida de Novedad de CIPADE */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '20px', alignItems: 'start' }}>
+      {/* Bloque 1: Acciones de Trazabilidad Especial (Cambio en Equipo Docente + Novedades de CIPADE) */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr', gap: '20px', alignItems: 'start' }}>
+        {/* Panel Cambio de Equipo de Co-investigadores */}
         <div
           style={{
-            backgroundColor: '#1e293b',
+            backgroundColor: '#FFFFFF',
             padding: '22px',
             borderRadius: '10px',
-            border: '1px solid #334155'
+            border: '1px solid #E5E7EB',
+            borderLeft: '4px solid #27272A',
+            boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)'
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-            <FileText size={18} color="#38bdf8" />
-            <h3 style={{ margin: 0, fontSize: '16px' }}>
-              Historial de Versiones del Documento PDF ({versionesPdf.length})
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', color: '#1F2937' }}>
+            <Users size={18} color="#27272A" />
+            <h3 style={{ margin: 0, fontSize: '16px', color: '#1F2937' }}>
+              Trazabilidad de Cambios en Equipo de Co-investigadores
             </h3>
           </div>
-          <p style={{ fontSize: '12px', color: '#94a3b8', margin: '0 0 14px 0' }}>
-            Cada subsanación conserva las versiones anteriores del archivo PDF para trazabilidad completa.
+          <p style={{ fontSize: '12px', color: '#4B5563', margin: '0 0 12px 0', lineHeight: 1.45 }}>
+            Vincule o retire un co-investigador o codirector docente dejando constancia de la fecha exacta y del soporte en el historial.
           </p>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {versionesPdf.map((v) => {
-              const esVigente = v.version === proyecto.version_documento;
-              return (
-                <div
-                  key={v.version}
+          <form onSubmit={handleCambioEquipo} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={() => setTipoCambioEquipo('vincular')}
+                style={{
+                  padding: '8px',
+                  borderRadius: '6px',
+                  border: tipoCambioEquipo === 'vincular' ? '2px solid #27272A' : '1px solid #D1D5DB',
+                  backgroundColor: tipoCambioEquipo === 'vincular' ? '#27272A' : '#F9FAFB',
+                  color: tipoCambioEquipo === 'vincular' ? '#FFFFFF' : '#1F2937',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer'
+                }}
+              >
+                + Vincular Co-investigador
+              </button>
+              <button
+                type="button"
+                onClick={() => setTipoCambioEquipo('retirar')}
+                style={{
+                  padding: '8px',
+                  borderRadius: '6px',
+                  border: tipoCambioEquipo === 'retirar' ? '2px solid #C8102E' : '1px solid #D1D5DB',
+                  backgroundColor: tipoCambioEquipo === 'retirar' ? '#FEE2E2' : '#F9FAFB',
+                  color: tipoCambioEquipo === 'retirar' ? '#9E0B22' : '#1F2937',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer'
+                }}
+              >
+                − Retirar Integrante
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.9fr 1fr', gap: '8px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', color: '#4B5563', fontWeight: 600, marginBottom: '3px' }}>
+                  Docente:
+                </label>
+                <select
+                  value={usuarioEquipoId}
+                  onChange={(e) => setUsuarioEquipoId(Number(e.target.value))}
                   style={{
-                    backgroundColor: '#0f172a',
-                    border: esVigente ? '1px solid #0284c7' : '1px solid #334155',
-                    padding: '10px 14px',
-                    borderRadius: '8px',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    gap: '12px'
+                    width: '100%',
+                    backgroundColor: '#FFFFFF',
+                    color: '#1F2937',
+                    border: '1px solid #D1D5DB',
+                    borderRadius: '6px',
+                    padding: '7px 8px',
+                    fontSize: '12px'
                   }}
                 >
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <strong style={{ color: '#f8fafc', fontSize: '13px' }}>
-                        Versión v{v.version}
-                      </strong>
-                      {esVigente && (
-                        <span
-                          style={{
-                            backgroundColor: '#0284c7',
-                            color: '#fff',
-                            padding: '1px 6px',
-                            borderRadius: '4px',
-                            fontSize: '10px',
-                            fontWeight: 700
-                          }}
-                        >
-                          VIGENTE
-                        </span>
-                      )}
-                      <span style={{ fontSize: '11px', color: '#94a3b8' }}>{v.fecha}</span>
-                    </div>
-                    <div style={{ fontSize: '11.5px', color: '#cbd5e1', marginTop: '3px' }}>
-                      Archivo: <code>{v.url}</code> · Por: {v.actor}
-                    </div>
-                  </div>
+                  {catalogos.docentes.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.nombre}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-                  <a
-                    href={obtenerUrlPdf(v.url)}
-                    target="_blank"
-                    rel="noreferrer"
-                    download
-                    style={{
-                      backgroundColor: esVigente ? '#0284c7' : '#334155',
-                      color: '#fff',
-                      padding: '7px 12px',
-                      borderRadius: '6px',
-                      fontSize: '11.5px',
-                      fontWeight: 700,
-                      textDecoration: 'none',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      whiteSpace: 'nowrap'
-                    }}
-                  >
-                    <Download size={14} /> Descargar v{v.version}
-                  </a>
-                </div>
-              );
-            })}
-          </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', color: '#4B5563', fontWeight: 600, marginBottom: '3px' }}>
+                  Rol:
+                </label>
+                <select
+                  value={rolEquipoNuevo}
+                  disabled={tipoCambioEquipo === 'retirar'}
+                  onChange={(e) =>
+                    setRolEquipoNuevo(e.target.value as 'coinvestigador' | 'codirector')
+                  }
+                  style={{
+                    width: '100%',
+                    backgroundColor: tipoCambioEquipo === 'retirar' ? '#F3F4F6' : '#FFFFFF',
+                    color: '#1F2937',
+                    border: '1px solid #D1D5DB',
+                    borderRadius: '6px',
+                    padding: '7px 8px',
+                    fontSize: '12px'
+                  }}
+                >
+                  <option value="coinvestigador">Co-investigador</option>
+                  <option value="codirector">Codirector</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', color: '#4B5563', fontWeight: 600, marginBottom: '3px' }}>
+                  Fecha movimiento:
+                </label>
+                <input
+                  type="date"
+                  value={fechaCambioEquipo}
+                  onChange={(e) => setFechaCambioEquipo(e.target.value)}
+                  style={{
+                    width: '100%',
+                    backgroundColor: '#FFFFFF',
+                    color: '#1F2937',
+                    border: '1px solid #D1D5DB',
+                    borderRadius: '6px',
+                    padding: '6px 8px',
+                    fontSize: '12px'
+                  }}
+                />
+              </div>
+            </div>
+
+            <input
+              type="text"
+              value={obsCambioEquipo}
+              onChange={(e) => setObsCambioEquipo(e.target.value)}
+              placeholder="Observaciones / Soporte de correo o acta para el cambio en el equipo..."
+              style={{
+                width: '100%',
+                backgroundColor: '#FFFFFF',
+                border: '1px solid #D1D5DB',
+                borderRadius: '6px',
+                padding: '8px 10px',
+                color: '#1F2937',
+                fontSize: '12.5px'
+              }}
+              required
+            />
+
+            <button
+              type="submit"
+              disabled={registrandoEquipo}
+              className="ub-btn-secondary"
+              style={{
+                padding: '9px 14px',
+                borderRadius: '6px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                fontSize: '12.5px'
+              }}
+            >
+              {registrandoEquipo
+                ? 'Guardando en historial...'
+                : 'Registrar Cambio de Equipo en Trazabilidad'}
+            </button>
+          </form>
         </div>
 
         {/* Bloque Creación de Novedad CIPADE */}
         <div
           style={{
-            backgroundColor: '#1e293b',
+            backgroundColor: '#FFFFFF',
             padding: '22px',
             borderRadius: '10px',
-            border: '1px solid #f43f5e55'
+            border: '1px solid #E5E7EB',
+            borderLeft: '4px solid #C8102E',
+            boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)'
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', color: '#fb7185' }}>
-            <AlertOctagon size={18} />
-            <h3 style={{ margin: 0, fontSize: '16px' }}>Registrar Novedad de CIPADE</h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', color: '#C8102E' }}>
+            <AlertOctagon size={18} color="#C8102E" />
+            <h3 style={{ margin: 0, fontSize: '16px', color: '#C8102E' }}>Registrar Novedad de CIPADE</h3>
           </div>
-          <p style={{ fontSize: '12px', color: '#cbd5e1', margin: '0 0 12px 0', lineHeight: 1.45 }}>
+          <p style={{ fontSize: '12px', color: '#4B5563', margin: '0 0 12px 0', lineHeight: 1.45 }}>
             Cuando un proyecto está en desarrollo, una <strong>Novedad de CIPADE</strong> devuelve el proyecto{' '}
-            <strong style={{ color: '#fb7185' }}>directamente a los investigadores docentes</strong> sin pasar de nuevo por el Comité de Investigación.
+            <strong style={{ color: '#9E0B22' }}>directamente a los investigadores docentes</strong> sin pasar de nuevo por el Comité de Investigación.
           </p>
 
           <form onSubmit={handleCrearNovedadCipade} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Calendar size={14} color="#C8102E" />
+              <label style={{ fontSize: '11.5px', color: '#374151', fontWeight: 600 }}>
+                Fecha de la novedad:
+              </label>
+              <input
+                type="date"
+                value={fechaCipade}
+                onChange={(e) => setFechaCipade(e.target.value)}
+                style={{
+                  backgroundColor: '#FFFFFF',
+                  color: '#1F2937',
+                  border: '1px solid #D1D5DB',
+                  borderRadius: '6px',
+                  padding: '6px 10px',
+                  fontSize: '12px'
+                }}
+              />
+            </div>
+
             <textarea
               rows={3}
               value={obsCipade}
               onChange={(e) => setObsCipade(e.target.value)}
-              placeholder="Ej: CIPADE solicita anexar el acta de propiedad intelectual o ajuste de cronograma para desembolso..."
+              placeholder="Ej: CIPADE solicita por correo anexar el acta de propiedad intelectual o ajuste de cronograma para desembolso..."
               style={{
                 width: '100%',
-                backgroundColor: '#0f172a',
-                border: '1px solid #334155',
+                backgroundColor: '#FFFFFF',
+                border: '1px solid #D1D5DB',
                 borderRadius: '6px',
                 padding: '10px',
-                color: '#fff',
+                color: '#1F2937',
                 fontSize: '12.5px'
               }}
               required
@@ -315,10 +407,8 @@ export const SeguimientoAvances: React.FC<Props> = ({
             <button
               type="submit"
               disabled={registrandoCipade}
+              className="ub-btn-primary"
               style={{
-                backgroundColor: '#e11d48',
-                color: '#fff',
-                border: 'none',
                 padding: '10px 14px',
                 borderRadius: '6px',
                 fontWeight: 700,
@@ -337,16 +427,17 @@ export const SeguimientoAvances: React.FC<Props> = ({
       {/* Bloque 2: Línea de Tiempo Visual de Trazabilidad */}
       <div
         style={{
-          backgroundColor: '#1e293b',
+          backgroundColor: '#FFFFFF',
           padding: '24px 28px',
           borderRadius: '10px',
-          border: '1px solid #334155'
+          border: '1px solid #E5E7EB',
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)'
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '18px' }}>
-          <Clock size={19} color="#38bdf8" />
-          <h3 style={{ margin: 0, fontSize: '17px' }}>
-            Línea de Tiempo de Trazabilidad ({proyecto.trazabilidad.length} movimientos)
+          <Clock size={19} color="#C8102E" />
+          <h3 style={{ margin: 0, fontSize: '17px', color: '#1F2937' }}>
+            Línea de Tiempo de Trazabilidad ({proyecto.trazabilidad.length} movimientos registrados)
           </h3>
         </div>
 
@@ -355,13 +446,13 @@ export const SeguimientoAvances: React.FC<Props> = ({
             <div
               key={item.id}
               style={{
-                backgroundColor: '#0f172a',
+                backgroundColor: '#F9FAFB',
                 padding: '16px 18px',
                 borderRadius: '8px',
-                borderLeft: idx === 0 ? '4px solid #38bdf8' : '4px solid #475569',
-                borderTop: '1px solid #334155',
-                borderRight: '1px solid #334155',
-                borderBottom: '1px solid #334155'
+                borderLeft: idx === 0 ? '4px solid #C8102E' : '4px solid #C59B27',
+                borderTop: '1px solid #E5E7EB',
+                borderRight: '1px solid #E5E7EB',
+                borderBottom: '1px solid #E5E7EB'
               }}
             >
               <div
@@ -379,25 +470,26 @@ export const SeguimientoAvances: React.FC<Props> = ({
                   <span
                     style={{
                       fontSize: '11.5px',
-                      color: '#cbd5e1',
+                      color: '#4B5563',
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: '6px',
-                      backgroundColor: '#1e293b',
+                      backgroundColor: '#FFFFFF',
+                      border: '1px solid #E5E7EB',
                       padding: '3px 8px',
                       borderRadius: '4px'
                     }}
                   >
                     <span>{formatearNombreEstado(item.estado_anterior)}</span>
-                    <ArrowRight size={12} color="#38bdf8" />
-                    <strong style={{ color: '#38bdf8' }}>
+                    <ArrowRight size={12} color="#C8102E" />
+                    <strong style={{ color: '#1F2937' }}>
                       {formatearNombreEstado(item.estado_nuevo)}
                     </strong>
                   </span>
                   <span
                     style={{
                       fontSize: '11px',
-                      color: '#94a3b8',
+                      color: '#6B7280',
                       textTransform: 'uppercase',
                       fontWeight: 700
                     }}
@@ -409,7 +501,7 @@ export const SeguimientoAvances: React.FC<Props> = ({
                 <span
                   style={{
                     fontSize: '12px',
-                    color: '#38bdf8',
+                    color: '#C8102E',
                     fontWeight: 700,
                     fontFamily: 'monospace'
                   }}
@@ -418,49 +510,13 @@ export const SeguimientoAvances: React.FC<Props> = ({
                 </span>
               </div>
 
-              <p style={{ margin: '6px 0 10px 0', fontSize: '13.5px', color: '#f8fafc', lineHeight: 1.5 }}>
+              <p style={{ margin: '6px 0 10px 0', fontSize: '13.5px', color: '#1F2937', lineHeight: 1.5 }}>
                 {item.observaciones}
               </p>
 
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  flexWrap: 'wrap',
-                  gap: '10px',
-                  fontSize: '12px',
-                  color: '#94a3b8'
-                }}
-              >
-                <div>
-                  Registrado por: <strong style={{ color: '#e2e8f0' }}>{item.actor_nombre}</strong>{' '}
-                  <span style={{ fontSize: '11px' }}>({item.actor_rol})</span>
-                </div>
-
-                {item.archivo_pdf_url && (
-                  <a
-                    href={obtenerUrlPdf(item.archivo_pdf_url)}
-                    target="_blank"
-                    rel="noreferrer"
-                    download
-                    style={{
-                      color: '#38bdf8',
-                      fontWeight: 700,
-                      textDecoration: 'none',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '5px',
-                      backgroundColor: '#0c4a6e',
-                      padding: '4px 10px',
-                      borderRadius: '5px',
-                      fontSize: '11.5px'
-                    }}
-                  >
-                    <Download size={13} /> Descargar PDF v{item.version_documento ?? 1} (
-                    {item.archivo_pdf_url})
-                  </a>
-                )}
+              <div style={{ fontSize: '12px', color: '#4B5563' }}>
+                Registrado por: <strong style={{ color: '#1F2937' }}>{item.actor_nombre}</strong>{' '}
+                <span style={{ fontSize: '11px', color: '#6B7280' }}>({item.actor_rol})</span>
               </div>
             </div>
           ))}
@@ -470,15 +526,16 @@ export const SeguimientoAvances: React.FC<Props> = ({
       {/* Bloque 3: Tabla de Auditoría de Trazabilidad */}
       <div
         style={{
-          backgroundColor: '#1e293b',
+          backgroundColor: '#FFFFFF',
           padding: '24px 28px',
           borderRadius: '10px',
-          border: '1px solid #334155'
+          border: '1px solid #E5E7EB',
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)'
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
-          <TableIcon size={18} color="#34d399" />
-          <h3 style={{ margin: 0, fontSize: '16px' }}>
+          <TableIcon size={18} color="#C59B27" />
+          <h3 style={{ margin: 0, fontSize: '16px', color: '#1F2937' }}>
             Tabla Oficial de Trazabilidad (Fechas Exactas y Observaciones)
           </h3>
         </div>
@@ -487,11 +544,11 @@ export const SeguimientoAvances: React.FC<Props> = ({
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12.5px' }}>
             <thead
               style={{
-                backgroundColor: '#0f172a',
-                color: '#94a3b8',
+                backgroundColor: '#F9FAFB',
+                color: '#4B5563',
                 textTransform: 'uppercase',
                 fontSize: '11px',
-                borderBottom: '1px solid #334155'
+                borderBottom: '1px solid #E5E7EB'
               }}
             >
               <tr>
@@ -500,43 +557,28 @@ export const SeguimientoAvances: React.FC<Props> = ({
                 <th style={{ padding: '10px 12px' }}>Evento</th>
                 <th style={{ padding: '10px 12px' }}>Estado Anterior → Nuevo</th>
                 <th style={{ padding: '10px 12px' }}>Actor</th>
-                <th style={{ padding: '10px 12px' }}>Observaciones</th>
-                <th style={{ padding: '10px 12px' }}>PDF</th>
+                <th style={{ padding: '10px 12px' }}>Observaciones / Soporte de Correo o Reunión</th>
               </tr>
             </thead>
             <tbody>
               {proyecto.trazabilidad.map((t) => (
-                <tr key={t.id} style={{ borderBottom: '1px solid #334155' }}>
-                  <td style={{ padding: '12px', fontFamily: 'monospace', whiteSpace: 'nowrap', color: '#38bdf8' }}>
+                <tr key={t.id} style={{ borderBottom: '1px solid #E5E7EB' }}>
+                  <td style={{ padding: '12px', fontFamily: 'monospace', whiteSpace: 'nowrap', color: '#C8102E', fontWeight: 700 }}>
                     {t.fecha_evento}
                   </td>
-                  <td style={{ padding: '12px', textTransform: 'uppercase', fontWeight: 600 }}>
+                  <td style={{ padding: '12px', textTransform: 'uppercase', fontWeight: 600, color: '#1F2937' }}>
                     {t.etapa}
                   </td>
                   <td style={{ padding: '12px' }}>
                     <BadgeEvento tipo={t.tipo_evento} />
                   </td>
-                  <td style={{ padding: '12px', color: '#cbd5e1' }}>
+                  <td style={{ padding: '12px', color: '#4B5563' }}>
                     {formatearNombreEstado(t.estado_anterior)} →{' '}
-                    <strong style={{ color: '#fff' }}>{formatearNombreEstado(t.estado_nuevo)}</strong>
+                    <strong style={{ color: '#1F2937' }}>{formatearNombreEstado(t.estado_nuevo)}</strong>
                   </td>
-                  <td style={{ padding: '12px', whiteSpace: 'nowrap' }}>{t.actor_nombre}</td>
-                  <td style={{ padding: '12px', color: '#e2e8f0', maxWidth: '300px' }}>
+                  <td style={{ padding: '12px', whiteSpace: 'nowrap', color: '#1F2937' }}>{t.actor_nombre}</td>
+                  <td style={{ padding: '12px', color: '#374151', maxWidth: '380px' }}>
                     {t.observaciones}
-                  </td>
-                  <td style={{ padding: '12px', whiteSpace: 'nowrap' }}>
-                    {t.archivo_pdf_url ? (
-                      <a
-                        href={obtenerUrlPdf(t.archivo_pdf_url)}
-                        target="_blank"
-                        rel="noreferrer"
-                        style={{ color: '#38bdf8', fontWeight: 700, textDecoration: 'none' }}
-                      >
-                        v{t.version_documento ?? 1}
-                      </a>
-                    ) : (
-                      '—'
-                    )}
                   </td>
                 </tr>
               ))}

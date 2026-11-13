@@ -2,11 +2,72 @@
   box-sizing: border-box;
 }
 
-body, html, #root {
+:root {
+  color-scheme: light;
+}
+
+body,
+html,
+#root {
   margin: 0;
   padding: 0;
   width: 100%;
   height: 100%;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-  background-color: #0f172a;
+  background-color: #F4F5F7;
+  color: #1F2937;
+}
+
+.ub-btn-primary {
+  background-color: #C8102E;
+  color: #FFFFFF;
+  border: none;
+  transition: background-color 0.15s ease;
+}
+
+.ub-btn-primary:hover:not(:disabled) {
+  background-color: #9E0B22;
+}
+
+.ub-btn-secondary {
+  background-color: #27272A;
+  color: #FFFFFF;
+  border: none;
+  transition: background-color 0.15s ease;
+}
+
+.ub-btn-secondary:hover:not(:disabled) {
+  background-color: #18181B;
+}
+
+.ub-btn-neutral {
+  background-color: #E5E7EB;
+  color: #1F2937;
+  border: 1px solid #D1D5DB;
+  transition: background-color 0.15s ease;
+}
+
+.ub-btn-neutral:hover:not(:disabled) {
+  background-color: #D1D5DB;
+}
+
+.ub-nav-item {
+  background-color: transparent;
+  color: #D1D5DB;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.ub-nav-item:hover {
+  background-color: #27272A;
+  color: #FFFFFF;
+}
+
+.ub-nav-item-active {
+  background-color: #C8102E;
+  color: #FFFFFF;
+}
+
+.ub-nav-item-active:hover {
+  background-color: #9E0B22;
+  color: #FFFFFF;
 }

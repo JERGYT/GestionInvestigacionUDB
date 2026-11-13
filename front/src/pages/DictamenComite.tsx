@@ -1,17 +1,17 @@
 import React, { useState } from 'react';
 import { ROLES_METADATA, type Catalogos, type EtapaProyecto, type Proyecto, type RolUsuario } from '../types';
-import { proyectosService, obtenerUrlPdf } from '../services/proyectos';
+import { proyectosService } from '../services/proyectos';
 import { BadgeEstado, BadgeEtapa } from '../components/ui/Badge';
 import {
   CheckCircle2,
   RotateCcw,
   Users,
-  FileUp,
   AlertOctagon,
   Award,
   PlayCircle,
-  FileText,
-  Calendar
+  Calendar,
+  MailCheck,
+  RefreshCw
 } from 'lucide-react';
 
 interface Props {
@@ -31,12 +31,14 @@ export const DictamenComite: React.FC<Props> = ({
   onEvaluado,
   onVolver
 }) => {
-  
+  const fechaHoy = new Date().toISOString().slice(0, 10);
+
+  // Estados para Líder de Grupo
   const [decisionLider, setDecisionLider] = useState<'aval_lider' | 'devolucion_lider'>('aval_lider');
+  const [fechaMovimientoLider, setFechaMovimientoLider] = useState(fechaHoy);
   const [obsLider, setObsLider] = useState('');
 
-  
-
+  // Estados para Comité FIAD
   const [accionComite, setAccionComite] = useState<
     'asignacion_pares' | 'aprobacion_facultad' | 'inicio_desarrollo' | 'novedad_cipade'
   >(
@@ -51,30 +53,27 @@ export const DictamenComite: React.FC<Props> = ({
   const [paresSeleccionados, setParesSeleccionados] = useState<number[]>(
     catalogos.pares.map((p) => p.id)
   );
-  const [fechaAsignacionPares, setFechaAsignacionPares] = useState(
-    new Date().toISOString().slice(0, 10)
-  );
+  const [fechaMovimientoComite, setFechaMovimientoComite] = useState(fechaHoy);
   const [nuevaEtapaFacultad, setNuevaEtapaFacultad] = useState<EtapaProyecto>(proyecto.etapa_actual);
   const [obsComite, setObsComite] = useState('');
 
-
-
-
+  // Estados para Par Evaluador
   const parPendienteDefault =
     proyecto.evaluaciones_pares.find((ev) => ev.veredicto === 'pendiente')?.par_usuario_id ??
     catalogos.pares[0]?.id ??
     5;
   const [parActivoId, setParActivoId] = useState<number>(parPendienteDefault);
   const [veredictoPar, setVeredictoPar] = useState<'aprobado' | 'con_correcciones'>('con_correcciones');
-  const [fechaConceptoPar, setFechaConceptoPar] = useState(new Date().toISOString().slice(0, 10));
+  const [fechaConceptoPar, setFechaConceptoPar] = useState(fechaHoy);
   const [obsPar, setObsPar] = useState('');
 
+  // Estados para Docente Investigador (Subsanación por correo / reunión)
   const [editTitulo, setEditTitulo] = useState(proyecto.titulo);
   const [editResumen, setEditResumen] = useState(proyecto.resumen);
   const [editLineaId, setEditLineaId] = useState(proyecto.linea_id);
   const [editSublineaId, setEditSublineaId] = useState(proyecto.sublinea_id);
+  const [fechaSubsanacion, setFechaSubsanacion] = useState(fechaHoy);
   const [obsSubsanacion, setObsSubsanacion] = useState('');
-  const [nuevoArchivoPdf, setNuevoArchivoPdf] = useState<File | null>(null);
 
   const [procesando, setProcesando] = useState(false);
   const [mensajeFeedback, setMensajeFeedback] = useState<{ tipo: 'ok' | 'error'; texto: string } | null>(
@@ -87,13 +86,12 @@ export const DictamenComite: React.FC<Props> = ({
     );
   };
 
-  
-
+  // 1. Ejecutar acción de Líder de Grupo
   const handleAccionLider = async () => {
     if (!obsLider.trim()) {
       setMensajeFeedback({
         tipo: 'error',
-        texto: 'Por favor ingrese las observaciones de revisión del Líder de Grupo (ej. fecha de reunión o correo).'
+        texto: 'Por favor ingrese las observaciones / soporte de correo o reunión del Líder de Grupo.'
       });
       return;
     }
@@ -102,6 +100,7 @@ export const DictamenComite: React.FC<Props> = ({
     const res = await proyectosService.transicion(proyecto.id, {
       accion: decisionLider,
       actor_id: 1,
+      fecha_evento: fechaMovimientoLider,
       observaciones: obsLider.trim()
     });
     setProcesando(false);
@@ -112,9 +111,7 @@ export const DictamenComite: React.FC<Props> = ({
     }
   };
 
-  
-
-
+  // 2. Ejecutar acción de Comité FIAD o Novedad CIPADE
   const handleAccionComite = async () => {
     if (accionComite === 'asignacion_pares' && paresSeleccionados.length === 0) {
       setMensajeFeedback({
@@ -129,7 +126,8 @@ export const DictamenComite: React.FC<Props> = ({
       accion: accionComite,
       actor_id: accionComite === 'novedad_cipade' ? 1 : 4,
       pares_ids: paresSeleccionados,
-      fecha_asignacion: fechaAsignacionPares,
+      fecha_asignacion: fechaMovimientoComite,
+      fecha_evento: fechaMovimientoComite,
       nueva_etapa: nuevaEtapaFacultad,
       observaciones: obsComite.trim()
     });
@@ -141,15 +139,12 @@ export const DictamenComite: React.FC<Props> = ({
     }
   };
 
-  
-
-
-
+  // 3. Ejecutar concepto individual de Par Evaluador
   const handleConceptoPar = async () => {
     if (!obsPar.trim()) {
       setMensajeFeedback({
         tipo: 'error',
-        texto: 'Ingrese las observaciones o concepto técnico del Par Evaluador.'
+        texto: 'Ingrese las observaciones o concepto técnico enviado por el Par Evaluador.'
       });
       return;
     }
@@ -159,6 +154,7 @@ export const DictamenComite: React.FC<Props> = ({
       par_usuario_id: parActivoId,
       veredicto: veredictoPar,
       fecha_concepto: fechaConceptoPar,
+      fecha_evento: fechaConceptoPar,
       concepto_observaciones: obsPar.trim()
     });
     setProcesando(false);
@@ -169,9 +165,7 @@ export const DictamenComite: React.FC<Props> = ({
     }
   };
 
-
-
-
+  // 4. Ejecutar Subsanación del Docente Investigador
   const handleSubsanarDocente = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editTitulo.trim()) {
@@ -181,33 +175,17 @@ export const DictamenComite: React.FC<Props> = ({
     setProcesando(true);
     setMensajeFeedback(null);
 
-    let res;
-    if (nuevoArchivoPdf) {
-      const formData = new FormData();
-      formData.append('actor_id', String(proyecto.investigador_principal_id));
-      formData.append('titulo', editTitulo.trim());
-      formData.append('resumen', editResumen.trim());
-      formData.append('linea_id', String(editLineaId));
-      formData.append('sublinea_id', String(editSublineaId));
-      formData.append(
-        'observaciones',
+    const res = await proyectosService.subsanar(proyecto.id, {
+      actor_id: proyecto.investigador_principal_id,
+      titulo: editTitulo.trim(),
+      resumen: editResumen.trim(),
+      linea_id: editLineaId,
+      sublinea_id: editSublineaId,
+      fecha_evento: fechaSubsanacion,
+      observaciones:
         obsSubsanacion.trim() ||
-          `Se actualiza documento a versión v${proyecto.version_documento + 1} atendiendo las observaciones.`
-      );
-      formData.append('archivo_pdf', nuevoArchivoPdf);
-      res = await proyectosService.subsanar(proyecto.id, formData);
-    } else {
-      res = await proyectosService.subsanar(proyecto.id, {
-        actor_id: proyecto.investigador_principal_id,
-        titulo: editTitulo.trim(),
-        resumen: editResumen.trim(),
-        linea_id: editLineaId,
-        sublinea_id: editSublineaId,
-        observaciones:
-          obsSubsanacion.trim() ||
-          `Se actualiza documento a versión v${proyecto.version_documento + 1} atendiendo las observaciones.`
-      });
-    }
+        'Se atendieron las observaciones y se enviaron los ajustes correspondientes por correo institucional.'
+    });
 
     setProcesando(false);
     if (res.error) {
@@ -224,62 +202,47 @@ export const DictamenComite: React.FC<Props> = ({
       {/* Encabezado del Proyecto en Evaluación / Subsanación */}
       <div
         style={{
-          backgroundColor: '#1e293b',
+          backgroundColor: '#FFFFFF',
           padding: '24px 28px',
           borderRadius: '10px',
-          border: '1px solid #334155'
+          border: '1px solid #E5E7EB',
+          borderTop: '4px solid #C8102E',
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)'
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px', flexWrap: 'wrap' }}>
           <div>
-            <span style={{ fontSize: '11px', color: '#38bdf8', fontWeight: 700, textTransform: 'uppercase' }}>
-              Gestión de Flujo de Estados · Expediente Docente #{proyecto.id}
+            <span style={{ fontSize: '11px', color: '#C8102E', fontWeight: 700, textTransform: 'uppercase' }}>
+              Gestión de Flujo de Estados e Historial · Expediente Docente #{proyecto.id}
             </span>
-            <h2 style={{ fontSize: '20px', margin: '6px 0 8px 0' }}>{proyecto.titulo}</h2>
+            <h2 style={{ fontSize: '20px', margin: '6px 0 8px 0', color: '#1F2937' }}>{proyecto.titulo}</h2>
             <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
               <BadgeEstado estado={proyecto.estado_actual} />
               <BadgeEtapa etapa={proyecto.etapa_actual} />
               <span
                 style={{
-                  backgroundColor: '#0f172a',
-                  border: '1px solid #475569',
-                  color: '#fbbf24',
+                  backgroundColor: '#FEF9E7',
+                  border: '1px solid #C59B27',
+                  color: '#8A6A10',
                   padding: '4px 10px',
                   borderRadius: '6px',
                   fontSize: '11px',
-                  fontWeight: 700
+                  fontWeight: 700,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px'
                 }}
               >
-                Rondas de revisión acumuladas: {proyecto.rondas_revision}
+                <RefreshCw size={12} color="#C59B27" /> Rondas de revisión acumuladas: {proyecto.rondas_revision}
               </span>
-              {proyecto.documento_actual_url && (
-                <a
-                  href={obtenerUrlPdf(proyecto.documento_actual_url)}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{
-                    color: '#38bdf8',
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    textDecoration: 'none'
-                  }}
-                >
-                  <FileText size={14} /> Ver PDF vigente (v{proyecto.version_documento})
-                </a>
-              )}
             </div>
           </div>
 
           <button
             type="button"
             onClick={onVolver}
+            className="ub-btn-neutral"
             style={{
-              backgroundColor: '#334155',
-              color: '#f8fafc',
-              border: 'none',
               padding: '9px 16px',
               borderRadius: '6px',
               cursor: 'pointer',
@@ -296,14 +259,14 @@ export const DictamenComite: React.FC<Props> = ({
           style={{
             marginTop: '18px',
             paddingTop: '16px',
-            borderTop: '1px solid #334155',
+            borderTop: '1px solid #E5E7EB',
             display: 'flex',
             gap: '8px',
             flexWrap: 'wrap',
             alignItems: 'center'
           }}
         >
-          <span style={{ fontSize: '12px', color: '#94a3b8', marginRight: '6px' }}>
+          <span style={{ fontSize: '12px', color: '#4B5563', fontWeight: 600, marginRight: '6px' }}>
             Actuar como rol:
           </span>
           {(['lider_grupo', 'comite', 'par_evaluador', 'docente'] as RolUsuario[]).map((r) => {
@@ -315,9 +278,9 @@ export const DictamenComite: React.FC<Props> = ({
                 type="button"
                 onClick={() => setRolActual(r)}
                 style={{
-                  backgroundColor: activo ? meta.color : '#0f172a',
-                  color: activo ? '#0f172a' : '#cbd5e1',
-                  border: `1px solid ${meta.color}`,
+                  backgroundColor: activo ? '#C8102E' : '#F3F4F6',
+                  color: activo ? '#FFFFFF' : '#1F2937',
+                  border: activo ? '1px solid #C8102E' : '1px solid #D1D5DB',
                   padding: '6px 12px',
                   borderRadius: '6px',
                   fontSize: '12px',
@@ -335,12 +298,13 @@ export const DictamenComite: React.FC<Props> = ({
       {mensajeFeedback && (
         <div
           style={{
-            backgroundColor: mensajeFeedback.tipo === 'error' ? '#450a0a' : '#064e3b',
-            border: `1px solid ${mensajeFeedback.tipo === 'error' ? '#dc2626' : '#10b981'}`,
-            color: '#f8fafc',
+            backgroundColor: mensajeFeedback.tipo === 'error' ? '#FEE2E2' : '#D1FAE5',
+            border: `1px solid ${mensajeFeedback.tipo === 'error' ? '#C8102E' : '#10B981'}`,
+            color: mensajeFeedback.tipo === 'error' ? '#9E0B22' : '#065F46',
             padding: '12px 16px',
             borderRadius: '8px',
-            fontSize: '13px'
+            fontSize: '13px',
+            fontWeight: 600
           }}
         >
           {mensajeFeedback.texto}
@@ -351,17 +315,19 @@ export const DictamenComite: React.FC<Props> = ({
       {rolActual === 'lider_grupo' && (
         <div
           style={{
-            backgroundColor: '#1e293b',
+            backgroundColor: '#FFFFFF',
             padding: '28px',
             borderRadius: '10px',
-            border: '1px solid #34d39955'
+            border: '1px solid #E5E7EB',
+            borderLeft: '4px solid #10B981',
+            boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)'
           }}
         >
-          <h3 style={{ margin: '0 0 6px 0', fontSize: '18px', color: '#34d399' }}>
+          <h3 style={{ margin: '0 0 6px 0', fontSize: '18px', color: '#065F46' }}>
             Revisión de Líder de Grupo ({ROLES_METADATA.lider_grupo.actorNombre})
           </h3>
-          <p style={{ color: '#94a3b8', fontSize: '13px', margin: '0 0 20px 0' }}>
-            El Líder de Grupo revisa la propuesta radicada o subsanada por los docentes. Puede devolverla con observaciones (incrementando las rondas de revisión) o darle aval para enviarla al Comité de Investigación FIAD.
+          <p style={{ color: '#4B5563', fontSize: '13px', margin: '0 0 20px 0' }}>
+            El Líder de Grupo registra la fecha del movimiento y las observaciones enviadas por correo institucional o acordadas en reunión: devuelve con observaciones a los investigadores o da aval para pasar al Comité FIAD.
           </p>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '18px' }}>
@@ -371,9 +337,9 @@ export const DictamenComite: React.FC<Props> = ({
               style={{
                 padding: '16px',
                 borderRadius: '8px',
-                border: decisionLider === 'aval_lider' ? '2px solid #34d399' : '1px solid #334155',
-                backgroundColor: decisionLider === 'aval_lider' ? '#064e3b' : '#0f172a',
-                color: '#fff',
+                border: decisionLider === 'aval_lider' ? '2px solid #059669' : '1px solid #D1D5DB',
+                backgroundColor: decisionLider === 'aval_lider' ? '#ECFDF5' : '#F9FAFB',
+                color: decisionLider === 'aval_lider' ? '#065F46' : '#1F2937',
                 fontWeight: 700,
                 cursor: 'pointer',
                 display: 'flex',
@@ -382,7 +348,7 @@ export const DictamenComite: React.FC<Props> = ({
                 gap: '8px'
               }}
             >
-              <CheckCircle2 size={18} color="#34d399" /> Dar Aval y Pasar al Comité FIAD
+              <CheckCircle2 size={18} color="#059669" /> Dar Aval y Pasar al Comité FIAD
             </button>
 
             <button
@@ -391,9 +357,9 @@ export const DictamenComite: React.FC<Props> = ({
               style={{
                 padding: '16px',
                 borderRadius: '8px',
-                border: decisionLider === 'devolucion_lider' ? '2px solid #f87171' : '1px solid #334155',
-                backgroundColor: decisionLider === 'devolucion_lider' ? '#450a0a' : '#0f172a',
-                color: '#fff',
+                border: decisionLider === 'devolucion_lider' ? '2px solid #C8102E' : '1px solid #D1D5DB',
+                backgroundColor: decisionLider === 'devolucion_lider' ? '#FEF2F2' : '#F9FAFB',
+                color: decisionLider === 'devolucion_lider' ? '#9E0B22' : '#1F2937',
                 fontWeight: 700,
                 cursor: 'pointer',
                 display: 'flex',
@@ -402,26 +368,45 @@ export const DictamenComite: React.FC<Props> = ({
                 gap: '8px'
               }}
             >
-              <RotateCcw size={18} color="#f87171" /> Devolver con Observaciones a Investigadores
+              <RotateCcw size={18} color="#C8102E" /> Devolver con Observaciones a Investigadores
             </button>
           </div>
 
           <div style={{ marginBottom: '16px' }}>
-            <label style={{ display: 'block', fontSize: '12px', color: '#cbd5e1', marginBottom: '6px', fontWeight: 600 }}>
-              Observaciones de la Revisión (Reunión realizada, correo enviado, ajustes o aval) *
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#374151', marginBottom: '6px', fontWeight: 600 }}>
+              <Calendar size={14} color="#C8102E" /> Fecha del Movimiento (Ej: 3 de noviembre, 11 de noviembre) *
+            </label>
+            <input
+              type="date"
+              value={fechaMovimientoLider}
+              onChange={(e) => setFechaMovimientoLider(e.target.value)}
+              style={{
+                backgroundColor: '#FFFFFF',
+                color: '#1F2937',
+                border: '1px solid #D1D5DB',
+                borderRadius: '6px',
+                padding: '9px 12px',
+                fontSize: '13px'
+              }}
+            />
+          </div>
+
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{ display: 'block', fontSize: '12px', color: '#374151', marginBottom: '6px', fontWeight: 600 }}>
+              Observaciones / Soporte de Correo Institucional o Reunión *
             </label>
             <textarea
               rows={4}
               value={obsLider}
               onChange={(e) => setObsLider(e.target.value)}
-              placeholder="Ej: Se realizó reunión con los investigadores el día de hoy y se verificó la pertinencia metodológica..."
+              placeholder="Ej: Se realizó reunión el 06/11 y se envió correo institucional solicitando ajustar los objetivos específicos..."
               style={{
                 width: '100%',
-                backgroundColor: '#0f172a',
-                border: '1px solid #334155',
+                backgroundColor: '#FFFFFF',
+                border: '1px solid #D1D5DB',
                 borderRadius: '6px',
                 padding: '12px',
-                color: '#fff',
+                color: '#1F2937',
                 fontSize: '13px'
               }}
             />
@@ -431,11 +416,9 @@ export const DictamenComite: React.FC<Props> = ({
             type="button"
             disabled={procesando}
             onClick={handleAccionLider}
+            className="ub-btn-primary"
             style={{
               width: '100%',
-              backgroundColor: decisionLider === 'aval_lider' ? '#059669' : '#dc2626',
-              color: '#fff',
-              border: 'none',
               padding: '12px',
               borderRadius: '8px',
               fontWeight: 700,
@@ -456,17 +439,19 @@ export const DictamenComite: React.FC<Props> = ({
       {rolActual === 'comite' && (
         <div
           style={{
-            backgroundColor: '#1e293b',
+            backgroundColor: '#FFFFFF',
             padding: '28px',
             borderRadius: '10px',
-            border: '1px solid #fbbf2455'
+            border: '1px solid #E5E7EB',
+            borderLeft: '4px solid #C59B27',
+            boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)'
           }}
         >
-          <h3 style={{ margin: '0 0 6px 0', fontSize: '18px', color: '#fbbf24' }}>
+          <h3 style={{ margin: '0 0 6px 0', fontSize: '18px', color: '#8A6A10' }}>
             Gestión del Comité de Investigación FIAD y Novedades CIPADE
           </h3>
-          <p style={{ color: '#94a3b8', fontSize: '13px', margin: '0 0 20px 0' }}>
-            Seleccione la acción institucional a aplicar sobre el proyecto docente: asignación de pares con fecha, aprobación a nivel de facultad, paso a desarrollo o reporte de Novedad CIPADE.
+          <p style={{ color: '#4B5563', fontSize: '13px', margin: '0 0 20px 0' }}>
+            Seleccione la acción institucional a registrar en el historial: asignación de pares con fecha, aprobación a nivel de facultad, inicio de desarrollo o Novedad de CIPADE.
           </p>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
@@ -476,9 +461,9 @@ export const DictamenComite: React.FC<Props> = ({
               style={{
                 padding: '14px',
                 borderRadius: '8px',
-                border: accionComite === 'asignacion_pares' ? '2px solid #c084fc' : '1px solid #334155',
-                backgroundColor: accionComite === 'asignacion_pares' ? '#3b0764' : '#0f172a',
-                color: '#fff',
+                border: accionComite === 'asignacion_pares' ? '2px solid #C59B27' : '1px solid #D1D5DB',
+                backgroundColor: accionComite === 'asignacion_pares' ? '#FEF9E7' : '#F9FAFB',
+                color: accionComite === 'asignacion_pares' ? '#8A6A10' : '#1F2937',
                 fontWeight: 700,
                 cursor: 'pointer',
                 display: 'flex',
@@ -486,7 +471,7 @@ export const DictamenComite: React.FC<Props> = ({
                 gap: '8px'
               }}
             >
-              <Users size={18} color="#c084fc" /> 1. Asignar Pares Evaluadores con Fecha
+              <Users size={18} color="#C59B27" /> 1. Asignar Pares Evaluadores con Fecha
             </button>
 
             <button
@@ -495,9 +480,9 @@ export const DictamenComite: React.FC<Props> = ({
               style={{
                 padding: '14px',
                 borderRadius: '8px',
-                border: accionComite === 'aprobacion_facultad' ? '2px solid #4ade80' : '1px solid #334155',
-                backgroundColor: accionComite === 'aprobacion_facultad' ? '#14532d' : '#0f172a',
-                color: '#fff',
+                border: accionComite === 'aprobacion_facultad' ? '2px solid #059669' : '1px solid #D1D5DB',
+                backgroundColor: accionComite === 'aprobacion_facultad' ? '#ECFDF5' : '#F9FAFB',
+                color: accionComite === 'aprobacion_facultad' ? '#065F46' : '#1F2937',
                 fontWeight: 700,
                 cursor: 'pointer',
                 display: 'flex',
@@ -505,7 +490,7 @@ export const DictamenComite: React.FC<Props> = ({
                 gap: '8px'
               }}
             >
-              <Award size={18} color="#4ade80" /> 2. Aprobar a Nivel de Facultad
+              <Award size={18} color="#059669" /> 2. Aprobar a Nivel de Facultad
             </button>
 
             <button
@@ -514,9 +499,9 @@ export const DictamenComite: React.FC<Props> = ({
               style={{
                 padding: '14px',
                 borderRadius: '8px',
-                border: accionComite === 'inicio_desarrollo' ? '2px solid #2dd4bf' : '1px solid #334155',
-                backgroundColor: accionComite === 'inicio_desarrollo' ? '#134e4a' : '#0f172a',
-                color: '#fff',
+                border: accionComite === 'inicio_desarrollo' ? '2px solid #0D9488' : '1px solid #D1D5DB',
+                backgroundColor: accionComite === 'inicio_desarrollo' ? '#F0FDFA' : '#F9FAFB',
+                color: accionComite === 'inicio_desarrollo' ? '#115E59' : '#1F2937',
                 fontWeight: 700,
                 cursor: 'pointer',
                 display: 'flex',
@@ -524,7 +509,7 @@ export const DictamenComite: React.FC<Props> = ({
                 gap: '8px'
               }}
             >
-              <PlayCircle size={18} color="#2dd4bf" /> 3. Iniciar Desarrollo del Proyecto
+              <PlayCircle size={18} color="#0D9488" /> 3. Iniciar Desarrollo del Proyecto
             </button>
 
             <button
@@ -533,9 +518,9 @@ export const DictamenComite: React.FC<Props> = ({
               style={{
                 padding: '14px',
                 borderRadius: '8px',
-                border: accionComite === 'novedad_cipade' ? '2px solid #fb7185' : '1px solid #334155',
-                backgroundColor: accionComite === 'novedad_cipade' ? '#4c0519' : '#0f172a',
-                color: '#fff',
+                border: accionComite === 'novedad_cipade' ? '2px solid #C8102E' : '1px solid #D1D5DB',
+                backgroundColor: accionComite === 'novedad_cipade' ? '#FEF2F2' : '#F9FAFB',
+                color: accionComite === 'novedad_cipade' ? '#9E0B22' : '#1F2937',
                 fontWeight: 700,
                 cursor: 'pointer',
                 display: 'flex',
@@ -543,45 +528,45 @@ export const DictamenComite: React.FC<Props> = ({
                 gap: '8px'
               }}
             >
-              <AlertOctagon size={18} color="#fb7185" /> 4. Crear Novedad de CIPADE (Directo a Docentes)
+              <AlertOctagon size={18} color="#C8102E" /> 4. Crear Novedad de CIPADE (Directo a Docentes)
             </button>
+          </div>
+
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#374151', marginBottom: '6px', fontWeight: 600 }}>
+              <Calendar size={14} color="#C59B27" /> Fecha del Movimiento / Fecha de Asignación *
+            </label>
+            <input
+              type="date"
+              value={fechaMovimientoComite}
+              onChange={(e) => setFechaMovimientoComite(e.target.value)}
+              style={{
+                backgroundColor: '#FFFFFF',
+                color: '#1F2937',
+                border: '1px solid #D1D5DB',
+                borderRadius: '6px',
+                padding: '9px 12px',
+                fontSize: '13px'
+              }}
+            />
           </div>
 
           {accionComite === 'asignacion_pares' && (
             <div
               style={{
-                backgroundColor: '#0f172a',
+                backgroundColor: '#F9FAFB',
                 padding: '16px',
                 borderRadius: '8px',
-                border: '1px solid #4c1d95',
+                border: '1px solid #C59B27',
                 marginBottom: '16px',
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '12px'
               }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-                <strong style={{ fontSize: '13px', color: '#c084fc' }}>
-                  Selección de Pares Evaluadores y Fecha de Asignación
-                </strong>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Calendar size={15} color="#c084fc" />
-                  <label style={{ fontSize: '12px', color: '#cbd5e1' }}>Fecha asignación:</label>
-                  <input
-                    type="date"
-                    value={fechaAsignacionPares}
-                    onChange={(e) => setFechaAsignacionPares(e.target.value)}
-                    style={{
-                      backgroundColor: '#1e293b',
-                      color: '#fff',
-                      border: '1px solid #475569',
-                      borderRadius: '6px',
-                      padding: '6px 10px',
-                      fontSize: '12.5px'
-                    }}
-                  />
-                </div>
-              </div>
+              <strong style={{ fontSize: '13px', color: '#8A6A10' }}>
+                Selección de Pares Evaluadores a los que se remite por correo
+              </strong>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 {catalogos.pares.map((par) => {
@@ -594,8 +579,8 @@ export const DictamenComite: React.FC<Props> = ({
                         alignItems: 'center',
                         gap: '10px',
                         padding: '10px 12px',
-                        backgroundColor: checked ? '#2e1065' : '#1e293b',
-                        border: checked ? '1px solid #a855f7' : '1px solid #334155',
+                        backgroundColor: checked ? '#FEF9E7' : '#FFFFFF',
+                        border: checked ? '1px solid #C59B27' : '1px solid #D1D5DB',
                         borderRadius: '6px',
                         cursor: 'pointer',
                         fontSize: '12.5px'
@@ -607,8 +592,8 @@ export const DictamenComite: React.FC<Props> = ({
                         onChange={() => toggleParAsignado(par.id)}
                       />
                       <div>
-                        <div style={{ fontWeight: 700 }}>{par.nombre}</div>
-                        <div style={{ fontSize: '11px', color: '#94a3b8' }}>
+                        <div style={{ fontWeight: 700, color: '#1F2937' }}>{par.nombre}</div>
+                        <div style={{ fontSize: '11px', color: '#6B7280' }}>
                           {par.programa} · {par.email}
                         </div>
                       </div>
@@ -622,14 +607,14 @@ export const DictamenComite: React.FC<Props> = ({
           {accionComite === 'aprobacion_facultad' && (
             <div
               style={{
-                backgroundColor: '#0f172a',
+                backgroundColor: '#ECFDF5',
                 padding: '14px',
                 borderRadius: '8px',
-                border: '1px solid #14532d',
+                border: '1px solid #6EE7B7',
                 marginBottom: '16px'
               }}
             >
-              <label style={{ display: 'block', fontSize: '12px', color: '#86efac', marginBottom: '6px', fontWeight: 600 }}>
+              <label style={{ display: 'block', fontSize: '12px', color: '#065F46', marginBottom: '6px', fontWeight: 600 }}>
                 Etapa aprobada a nivel de Facultad:
               </label>
               <select
@@ -637,9 +622,9 @@ export const DictamenComite: React.FC<Props> = ({
                 onChange={(e) => setNuevaEtapaFacultad(e.target.value as EtapaProyecto)}
                 style={{
                   width: '100%',
-                  backgroundColor: '#1e293b',
-                  color: '#fff',
-                  border: '1px solid #334155',
+                  backgroundColor: '#FFFFFF',
+                  color: '#1F2937',
+                  border: '1px solid #D1D5DB',
                   borderRadius: '6px',
                   padding: '9px 12px',
                   fontSize: '13px'
@@ -656,22 +641,22 @@ export const DictamenComite: React.FC<Props> = ({
           {accionComite === 'novedad_cipade' && (
             <div
               style={{
-                backgroundColor: '#4c0519',
-                border: '1px solid #f43f5e',
+                backgroundColor: '#FEF2F2',
+                border: '1px solid #C8102E',
                 padding: '12px 14px',
                 borderRadius: '8px',
                 fontSize: '12.5px',
-                color: '#ffe4e6',
+                color: '#9E0B22',
                 marginBottom: '16px'
               }}
             >
-              <strong>Regla de Negocio CIPADE:</strong> Al registrar una Novedad de CIPADE durante el desarrollo del proyecto, el expediente regresa <strong>directamente a los investigadores docentes</strong> para que editen y suban la nueva versión del PDF, y una vez subsanado retoma su desarrollo <strong>sin tener que pasar de nuevo por el Comité</strong>.
+              <strong>Regla de Negocio CIPADE:</strong> Al registrar una Novedad de CIPADE durante el desarrollo del proyecto, el expediente regresa <strong>directamente a los investigadores docentes</strong> para su ajuste, y una vez subsanado retoma su desarrollo <strong>sin tener que pasar de nuevo por el Comité</strong>.
             </div>
           )}
 
           <div style={{ marginBottom: '16px' }}>
-            <label style={{ display: 'block', fontSize: '12px', color: '#cbd5e1', marginBottom: '6px', fontWeight: 600 }}>
-              Acta / Observaciones para el Historial de Trazabilidad *
+            <label style={{ display: 'block', fontSize: '12px', color: '#374151', marginBottom: '6px', fontWeight: 600 }}>
+              Observaciones / Soporte de Correo, Acta o Reunión *
             </label>
             <textarea
               rows={4}
@@ -679,16 +664,16 @@ export const DictamenComite: React.FC<Props> = ({
               onChange={(e) => setObsComite(e.target.value)}
               placeholder={
                 accionComite === 'novedad_cipade'
-                  ? 'Ej: CIPADE solicita anexar el acta de propiedad intelectual o ajuste de rubros antes del desembolso...'
-                  : 'Ingrese el detalle del acta o resolución del Comité de Investigación FIAD...'
+                  ? 'Ej: CIPADE solicita por correo anexar el acta de propiedad intelectual antes del primer desembolso...'
+                  : 'Ingrese el detalle del correo enviado, acta de comité o acuerdo de reunión...'
               }
               style={{
                 width: '100%',
-                backgroundColor: '#0f172a',
-                border: '1px solid #334155',
+                backgroundColor: '#FFFFFF',
+                border: '1px solid #D1D5DB',
                 borderRadius: '6px',
                 padding: '12px',
-                color: '#fff',
+                color: '#1F2937',
                 fontSize: '13px'
               }}
             />
@@ -698,11 +683,9 @@ export const DictamenComite: React.FC<Props> = ({
             type="button"
             disabled={procesando}
             onClick={handleAccionComite}
+            className="ub-btn-primary"
             style={{
               width: '100%',
-              backgroundColor: '#0284c7',
-              color: '#fff',
-              border: 'none',
               padding: '12px',
               borderRadius: '8px',
               fontWeight: 700,
@@ -710,7 +693,7 @@ export const DictamenComite: React.FC<Props> = ({
               fontSize: '13.5px'
             }}
           >
-            {procesando ? 'Ejecutando transición...' : 'Registrar Decisión Oficial en Trazabilidad'}
+            {procesando ? 'Ejecutando transición...' : 'Registrar Decisión Oficial en Historial de Trazabilidad'}
           </button>
         </div>
       )}
@@ -719,25 +702,27 @@ export const DictamenComite: React.FC<Props> = ({
       {rolActual === 'par_evaluador' && (
         <div
           style={{
-            backgroundColor: '#1e293b',
+            backgroundColor: '#FFFFFF',
             padding: '28px',
             borderRadius: '10px',
-            border: '1px solid #c084fc55'
+            border: '1px solid #E5E7EB',
+            borderLeft: '4px solid #F59E0B',
+            boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)'
           }}
         >
-          <h3 style={{ margin: '0 0 6px 0', fontSize: '18px', color: '#c084fc' }}>
+          <h3 style={{ margin: '0 0 6px 0', fontSize: '18px', color: '#92400E' }}>
             Dictamen de Par Evaluador
           </h3>
-          <p style={{ color: '#94a3b8', fontSize: '13px', margin: '0 0 18px 0' }}>
+          <p style={{ color: '#4B5563', fontSize: '13px', margin: '0 0 18px 0' }}>
             Regla de evaluación por pares: cada par emite su concepto individual con fecha.{' '}
-            <strong style={{ color: '#f87171' }}>
+            <strong style={{ color: '#C8102E' }}>
               Si al menos un par devuelve el proyecto con correcciones, el proyecto se devuelve completo a los investigadores (`en_revision_investigadores`).
             </strong>
           </p>
 
           {proyecto.evaluaciones_pares.length > 0 && (
             <div style={{ marginBottom: '20px' }}>
-              <div style={{ fontSize: '12px', fontWeight: 700, color: '#cbd5e1', marginBottom: '8px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: '#374151', marginBottom: '8px' }}>
                 Estado Actual de Pares Asignados en este Proyecto:
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
@@ -747,17 +732,17 @@ export const DictamenComite: React.FC<Props> = ({
                     onClick={() => setParActivoId(ev.par_usuario_id)}
                     style={{
                       padding: '12px',
-                      backgroundColor: parActivoId === ev.par_usuario_id ? '#2e1065' : '#0f172a',
+                      backgroundColor: parActivoId === ev.par_usuario_id ? '#FEF9E7' : '#F9FAFB',
                       border:
                         parActivoId === ev.par_usuario_id
-                          ? '2px solid #c084fc'
-                          : '1px solid #334155',
+                          ? '2px solid #C59B27'
+                          : '1px solid #E5E7EB',
                       borderRadius: '8px',
                       cursor: 'pointer'
                     }}
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <strong style={{ fontSize: '13px' }}>{ev.par_nombre}</strong>
+                      <strong style={{ fontSize: '13px', color: '#1F2937' }}>{ev.par_nombre}</strong>
                       <span
                         style={{
                           fontSize: '10px',
@@ -767,21 +752,33 @@ export const DictamenComite: React.FC<Props> = ({
                           borderRadius: '4px',
                           backgroundColor:
                             ev.veredicto === 'aprobado'
-                              ? '#14532d'
+                              ? '#D1FAE5'
                               : ev.veredicto === 'con_correcciones'
-                              ? '#7f1d1d'
-                              : '#475569'
+                              ? '#FEE2E2'
+                              : '#FEF3C7',
+                          color:
+                            ev.veredicto === 'aprobado'
+                              ? '#065F46'
+                              : ev.veredicto === 'con_correcciones'
+                              ? '#9E0B22'
+                              : '#92400E',
+                          border:
+                            ev.veredicto === 'aprobado'
+                              ? '1px solid #10B981'
+                              : ev.veredicto === 'con_correcciones'
+                              ? '1px solid #C8102E'
+                              : '1px solid #F59E0B'
                         }}
                       >
                         {ev.veredicto.replace('_', ' ')}
                       </span>
                     </div>
-                    <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>
+                    <div style={{ fontSize: '11px', color: '#6B7280', marginTop: '4px' }}>
                       Ronda {ev.ronda} · Asignado: {ev.fecha_asignacion}
                       {ev.fecha_concepto ? ` · Concepto: ${ev.fecha_concepto}` : ''}
                     </div>
                     {ev.concepto_observaciones && (
-                      <div style={{ fontSize: '11.5px', color: '#e2e8f0', marginTop: '6px' }}>
+                      <div style={{ fontSize: '11.5px', color: '#374151', marginTop: '6px' }}>
                         "{ev.concepto_observaciones}"
                       </div>
                     )}
@@ -793,7 +790,7 @@ export const DictamenComite: React.FC<Props> = ({
 
           <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '14px', marginBottom: '16px' }}>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', color: '#cbd5e1', marginBottom: '6px', fontWeight: 600 }}>
+              <label style={{ display: 'block', fontSize: '12px', color: '#374151', marginBottom: '6px', fontWeight: 600 }}>
                 Seleccionar Par Evaluador que emite el concepto *
               </label>
               <select
@@ -801,9 +798,9 @@ export const DictamenComite: React.FC<Props> = ({
                 onChange={(e) => setParActivoId(Number(e.target.value))}
                 style={{
                   width: '100%',
-                  backgroundColor: '#0f172a',
-                  color: '#fff',
-                  border: '1px solid #334155',
+                  backgroundColor: '#FFFFFF',
+                  color: '#1F2937',
+                  border: '1px solid #D1D5DB',
                   borderRadius: '6px',
                   padding: '10px 12px',
                   fontSize: '13px'
@@ -818,8 +815,8 @@ export const DictamenComite: React.FC<Props> = ({
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '12px', color: '#cbd5e1', marginBottom: '6px', fontWeight: 600 }}>
-                Fecha del Concepto *
+              <label style={{ display: 'block', fontSize: '12px', color: '#374151', marginBottom: '6px', fontWeight: 600 }}>
+                Fecha del Movimiento / Concepto *
               </label>
               <input
                 type="date"
@@ -827,9 +824,9 @@ export const DictamenComite: React.FC<Props> = ({
                 onChange={(e) => setFechaConceptoPar(e.target.value)}
                 style={{
                   width: '100%',
-                  backgroundColor: '#0f172a',
-                  color: '#fff',
-                  border: '1px solid #334155',
+                  backgroundColor: '#FFFFFF',
+                  color: '#1F2937',
+                  border: '1px solid #D1D5DB',
                   borderRadius: '6px',
                   padding: '9px 12px',
                   fontSize: '13px'
@@ -845,9 +842,9 @@ export const DictamenComite: React.FC<Props> = ({
               style={{
                 padding: '14px',
                 borderRadius: '8px',
-                border: veredictoPar === 'aprobado' ? '2px solid #4ade80' : '1px solid #334155',
-                backgroundColor: veredictoPar === 'aprobado' ? '#14532d' : '#0f172a',
-                color: '#fff',
+                border: veredictoPar === 'aprobado' ? '2px solid #059669' : '1px solid #D1D5DB',
+                backgroundColor: veredictoPar === 'aprobado' ? '#ECFDF5' : '#F9FAFB',
+                color: veredictoPar === 'aprobado' ? '#065F46' : '#1F2937',
                 fontWeight: 700,
                 cursor: 'pointer'
               }}
@@ -861,9 +858,9 @@ export const DictamenComite: React.FC<Props> = ({
               style={{
                 padding: '14px',
                 borderRadius: '8px',
-                border: veredictoPar === 'con_correcciones' ? '2px solid #f87171' : '1px solid #334155',
-                backgroundColor: veredictoPar === 'con_correcciones' ? '#7f1d1d' : '#0f172a',
-                color: '#fff',
+                border: veredictoPar === 'con_correcciones' ? '2px solid #C8102E' : '1px solid #D1D5DB',
+                backgroundColor: veredictoPar === 'con_correcciones' ? '#FEF2F2' : '#F9FAFB',
+                color: veredictoPar === 'con_correcciones' ? '#9E0B22' : '#1F2937',
                 fontWeight: 700,
                 cursor: 'pointer'
               }}
@@ -873,8 +870,8 @@ export const DictamenComite: React.FC<Props> = ({
           </div>
 
           <div style={{ marginBottom: '16px' }}>
-            <label style={{ display: 'block', fontSize: '12px', color: '#cbd5e1', marginBottom: '6px', fontWeight: 600 }}>
-              Concepto Técnico y Observaciones del Par Evaluador *
+            <label style={{ display: 'block', fontSize: '12px', color: '#374151', marginBottom: '6px', fontWeight: 600 }}>
+              Concepto Técnico / Observaciones Remitidas por Correo *
             </label>
             <textarea
               rows={4}
@@ -883,11 +880,11 @@ export const DictamenComite: React.FC<Props> = ({
               placeholder="Detalle las correcciones metodológicas requeridas o las fortalezas del documento evaluado..."
               style={{
                 width: '100%',
-                backgroundColor: '#0f172a',
-                border: '1px solid #334155',
+                backgroundColor: '#FFFFFF',
+                border: '1px solid #D1D5DB',
                 borderRadius: '6px',
                 padding: '12px',
-                color: '#fff',
+                color: '#1F2937',
                 fontSize: '13px'
               }}
             />
@@ -897,11 +894,9 @@ export const DictamenComite: React.FC<Props> = ({
             type="button"
             disabled={procesando}
             onClick={handleConceptoPar}
+            className="ub-btn-primary"
             style={{
               width: '100%',
-              backgroundColor: veredictoPar === 'con_correcciones' ? '#dc2626' : '#7c3aed',
-              color: '#fff',
-              border: 'none',
               padding: '12px',
               borderRadius: '8px',
               fontWeight: 700,
@@ -918,50 +913,47 @@ export const DictamenComite: React.FC<Props> = ({
         </div>
       )}
 
-      {/* PANEL 4: DOCENTE INVESTIGADOR (SUBSANACIÓN Y NUEVA VERSIÓN DE PDF) */}
+      {/* PANEL 4: DOCENTE INVESTIGADOR (SUBSANACIÓN CON FECHA Y SOPORTE DE CORREO) */}
       {rolActual === 'docente' && (
         <div
           style={{
-            backgroundColor: '#1e293b',
+            backgroundColor: '#FFFFFF',
             padding: '28px',
             borderRadius: '10px',
-            border: '1px solid #38bdf855'
+            border: '1px solid #E5E7EB',
+            borderLeft: '4px solid #C8102E',
+            boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)'
           }}
         >
-          <h3 style={{ margin: '0 0 6px 0', fontSize: '18px', color: '#38bdf8' }}>
-            Subsanación de Observaciones y Carga de Nueva Versión PDF
+          <h3 style={{ margin: '0 0 6px 0', fontSize: '18px', color: '#C8102E' }}>
+            Subsanación de Observaciones por Parte de los Investigadores
           </h3>
-          <p style={{ color: '#94a3b8', fontSize: '13px', margin: '0 0 18px 0' }}>
-            Como investigador docente puede editar los campos del proyecto y cargar la versión{' '}
-            <strong style={{ color: '#38bdf8' }}>v{proyecto.version_documento + 1}</strong> del archivo PDF. La versión anterior{' '}
-            <strong style={{ color: '#fbbf24' }}>
-              (v{proyecto.version_documento}: {proyecto.documento_actual_url})
-            </strong>{' '}
-            quedará almacenada permanentemente en el historial de trazabilidad.
+          <p style={{ color: '#4B5563', fontSize: '13px', margin: '0 0 18px 0' }}>
+            Cuando un proyecto está devuelto con observaciones o por novedad de CIPADE, el investigador docente puede actualizar la información del proyecto y registrar la fecha exacta y el soporte de envío por correo institucional.
           </p>
 
           {ultimoMovimiento && (
             <div
               style={{
-                backgroundColor: '#450a0a',
-                border: '1px solid #dc2626',
+                backgroundColor: '#FEF2F2',
+                border: '1px solid #C8102E',
                 padding: '14px',
                 borderRadius: '8px',
                 marginBottom: '18px',
                 fontSize: '12.5px'
               }}
             >
-              <div style={{ fontWeight: 700, color: '#fca5a5', marginBottom: '4px' }}>
+              <div style={{ fontWeight: 700, color: '#9E0B22', marginBottom: '4px' }}>
                 Última Observación / Motivo de Devolución ({ultimoMovimiento.fecha_evento} —{' '}
                 {ultimoMovimiento.actor_nombre}):
               </div>
-              <div style={{ color: '#fef2f2' }}>{ultimoMovimiento.observaciones}</div>
+              <div style={{ color: '#1F2937' }}>{ultimoMovimiento.observaciones}</div>
             </div>
           )}
 
           <form onSubmit={handleSubsanarDocente} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', color: '#cbd5e1', marginBottom: '6px', fontWeight: 600 }}>
+              <label style={{ display: 'block', fontSize: '12px', color: '#374151', marginBottom: '6px', fontWeight: 600 }}>
                 Título del Proyecto Docente (Editable) *
               </label>
               <input
@@ -970,11 +962,11 @@ export const DictamenComite: React.FC<Props> = ({
                 onChange={(e) => setEditTitulo(e.target.value)}
                 style={{
                   width: '100%',
-                  backgroundColor: '#0f172a',
-                  border: '1px solid #334155',
+                  backgroundColor: '#FFFFFF',
+                  border: '1px solid #D1D5DB',
                   borderRadius: '6px',
                   padding: '10px 12px',
-                  color: '#fff',
+                  color: '#1F2937',
                   fontSize: '13.5px'
                 }}
                 required
@@ -982,7 +974,7 @@ export const DictamenComite: React.FC<Props> = ({
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '12px', color: '#cbd5e1', marginBottom: '6px', fontWeight: 600 }}>
+              <label style={{ display: 'block', fontSize: '12px', color: '#374151', marginBottom: '6px', fontWeight: 600 }}>
                 Resumen Ejecutivo Actualizado *
               </label>
               <textarea
@@ -991,11 +983,11 @@ export const DictamenComite: React.FC<Props> = ({
                 onChange={(e) => setEditResumen(e.target.value)}
                 style={{
                   width: '100%',
-                  backgroundColor: '#0f172a',
-                  border: '1px solid #334155',
+                  backgroundColor: '#FFFFFF',
+                  border: '1px solid #D1D5DB',
                   borderRadius: '6px',
                   padding: '10px 12px',
-                  color: '#fff',
+                  color: '#1F2937',
                   fontSize: '13px'
                 }}
               />
@@ -1003,7 +995,7 @@ export const DictamenComite: React.FC<Props> = ({
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
               <div>
-                <label style={{ display: 'block', fontSize: '12px', color: '#cbd5e1', marginBottom: '6px', fontWeight: 600 }}>
+                <label style={{ display: 'block', fontSize: '12px', color: '#374151', marginBottom: '6px', fontWeight: 600 }}>
                   Línea de Investigación
                 </label>
                 <select
@@ -1016,9 +1008,9 @@ export const DictamenComite: React.FC<Props> = ({
                   }}
                   style={{
                     width: '100%',
-                    backgroundColor: '#0f172a',
-                    color: '#fff',
-                    border: '1px solid #334155',
+                    backgroundColor: '#FFFFFF',
+                    color: '#1F2937',
+                    border: '1px solid #D1D5DB',
                     borderRadius: '6px',
                     padding: '9px 12px',
                     fontSize: '13px'
@@ -1033,7 +1025,7 @@ export const DictamenComite: React.FC<Props> = ({
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '12px', color: '#cbd5e1', marginBottom: '6px', fontWeight: 600 }}>
+                <label style={{ display: 'block', fontSize: '12px', color: '#374151', marginBottom: '6px', fontWeight: 600 }}>
                   Sublínea de Investigación
                 </label>
                 <select
@@ -1041,9 +1033,9 @@ export const DictamenComite: React.FC<Props> = ({
                   onChange={(e) => setEditSublineaId(Number(e.target.value))}
                   style={{
                     width: '100%',
-                    backgroundColor: '#0f172a',
-                    color: '#fff',
-                    border: '1px solid #334155',
+                    backgroundColor: '#FFFFFF',
+                    color: '#1F2937',
+                    border: '1px solid #D1D5DB',
                     borderRadius: '6px',
                     padding: '9px 12px',
                     fontSize: '13px'
@@ -1060,78 +1052,84 @@ export const DictamenComite: React.FC<Props> = ({
               </div>
             </div>
 
-            <div>
-              <label style={{ display: 'block', fontSize: '12px', color: '#cbd5e1', marginBottom: '6px', fontWeight: 600 }}>
-                Nueva Versión del Documento PDF (Se guardará como v{proyecto.version_documento + 1}) *
-              </label>
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: '12px',
-                  backgroundColor: '#0f172a',
-                  padding: '14px',
-                  borderRadius: '8px',
-                  border: '1px dashed #38bdf8'
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <FileUp size={20} color="#38bdf8" />
+            <div
+              style={{
+                backgroundColor: '#FEF9E7',
+                padding: '16px',
+                borderRadius: '8px',
+                border: '1px solid #C59B27',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px'
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#8A6A10', fontSize: '13px', fontWeight: 700 }}>
+                  <MailCheck size={17} color="#C59B27" /> Fecha del Movimiento y Soporte de Subsanación
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Calendar size={14} color="#8A6A10" />
+                  <label style={{ fontSize: '12px', color: '#1F2937', fontWeight: 600 }}>
+                    Fecha de subsanación *
+                  </label>
                   <input
-                    type="file"
-                    accept=".pdf"
-                    onChange={(e) => setNuevoArchivoPdf(e.target.files?.[0] ?? null)}
-                    style={{ color: '#cbd5e1', fontSize: '12.5px' }}
+                    type="date"
+                    value={fechaSubsanacion}
+                    onChange={(e) => setFechaSubsanacion(e.target.value)}
+                    style={{
+                      backgroundColor: '#FFFFFF',
+                      color: '#1F2937',
+                      border: '1px solid #D1D5DB',
+                      borderRadius: '6px',
+                      padding: '6px 10px',
+                      fontSize: '12.5px'
+                    }}
+                    required
                   />
                 </div>
-                <span style={{ fontSize: '11.5px', color: '#fbbf24', fontWeight: 700 }}>
-                  v{proyecto.version_documento} → v{proyecto.version_documento + 1}
-                </span>
               </div>
-            </div>
 
-            <div>
-              <label style={{ display: 'block', fontSize: '12px', color: '#cbd5e1', marginBottom: '6px', fontWeight: 600 }}>
-                Detalle de Ajustes Realizados en esta Subsanación *
-              </label>
-              <textarea
-                rows={3}
-                value={obsSubsanacion}
-                onChange={(e) => setObsSubsanacion(e.target.value)}
-                placeholder={`Ej: Se carga versión v${
-                  proyecto.version_documento + 1
-                } con los objetivos específicos ajustados y anexos requeridos...`}
-                style={{
-                  width: '100%',
-                  backgroundColor: '#0f172a',
-                  border: '1px solid #334155',
-                  borderRadius: '6px',
-                  padding: '10px 12px',
-                  color: '#fff',
-                  fontSize: '13px'
-                }}
-                required
-              />
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', color: '#374151', marginBottom: '6px', fontWeight: 600 }}>
+                  Observaciones / Soporte de Correo o Reunión *
+                </label>
+                <textarea
+                  rows={3}
+                  value={obsSubsanacion}
+                  onChange={(e) => setObsSubsanacion(e.target.value)}
+                  placeholder="Ej: El 11 de noviembre se remitió por correo institucional el documento con los objetivos ajustados según reunión..."
+                  style={{
+                    width: '100%',
+                    backgroundColor: '#FFFFFF',
+                    border: '1px solid #D1D5DB',
+                    borderRadius: '6px',
+                    padding: '10px 12px',
+                    color: '#1F2937',
+                    fontSize: '13px'
+                  }}
+                  required
+                />
+              </div>
             </div>
 
             <div
               style={{
-                backgroundColor: '#0f172a',
+                backgroundColor: '#F9FAFB',
                 padding: '12px 14px',
                 borderRadius: '8px',
-                border: '1px solid #334155',
+                border: '1px solid #E5E7EB',
                 fontSize: '12px',
-                color: '#cbd5e1'
+                color: '#374151'
               }}
             >
-              Destino tras subsanar:{' '}
+              Estado resultante tras subsanar:{' '}
               {proyecto.estado_actual === 'novedad_cipade' || proyecto.etapa_actual === 'desarrollo' ? (
-                <strong style={{ color: '#34d399' }}>
+                <strong style={{ color: '#065F46' }}>
                   Retorna directo a En Desarrollo (sin pasar de nuevo por el Comité FIAD)
                 </strong>
               ) : (
-                <strong style={{ color: '#38bdf8' }}>
+                <strong style={{ color: '#92400E' }}>
                   Pasa a En Revisión Líder para validación de ajustes
                 </strong>
               )}
@@ -1140,11 +1138,9 @@ export const DictamenComite: React.FC<Props> = ({
             <button
               type="submit"
               disabled={procesando}
+              className="ub-btn-primary"
               style={{
                 width: '100%',
-                backgroundColor: '#0284c7',
-                color: '#fff',
-                border: 'none',
                 padding: '12px',
                 borderRadius: '8px',
                 fontWeight: 700,
@@ -1153,8 +1149,8 @@ export const DictamenComite: React.FC<Props> = ({
               }}
             >
               {procesando
-                ? 'Guardando cambios y nueva versión PDF...'
-                : `Guardar Subsanación y Publicar Documento v${proyecto.version_documento + 1}`}
+                ? 'Guardando subsanación en historial...'
+                : 'Registrar Subsanación y Actualizar Estado del Proyecto'}
             </button>
           </form>
         </div>

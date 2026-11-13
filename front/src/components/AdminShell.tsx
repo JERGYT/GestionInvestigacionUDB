@@ -24,8 +24,8 @@ export const AdminShell: React.FC<AdminShellProps> = ({
         width: '100vw',
         height: '100vh',
         overflow: 'hidden',
-        backgroundColor: '#0f172a',
-        color: '#f8fafc'
+        backgroundColor: '#F4F5F7',
+        color: '#1F2937'
       }}
     >
       <Sidebar
@@ -40,7 +40,9 @@ export const AdminShell: React.FC<AdminShellProps> = ({
           height: '100vh',
           overflowY: 'auto',
           padding: '28px 36px',
-          boxSizing: 'border-box'
+          boxSizing: 'border-box',
+          backgroundColor: '#F4F5F7',
+          color: '#1F2937'
         }}
       >
         {children}

@@ -37,7 +37,8 @@ export const BadgeEtapa: React.FC<{ etapa: EtapaProyecto }> = ({ etapa }) => {
     <span
       style={{
         backgroundColor: meta.bg,
-        color: '#f8fafc',
+        color: meta.text,
+        border: `1px solid ${meta.border}`,
         padding: '4px 10px',
         borderRadius: '6px',
         fontSize: '11px',
@@ -53,13 +54,18 @@ export const BadgeEtapa: React.FC<{ etapa: EtapaProyecto }> = ({ etapa }) => {
 };
 
 export const BadgeEvento: React.FC<{ tipo: TipoEventoTrazabilidad }> = ({ tipo }) => {
-  const meta = EVENTOS_METADATA[tipo] || { label: tipo, color: '#cbd5e1', bg: '#334155' };
+  const meta = EVENTOS_METADATA[tipo] || {
+    label: tipo,
+    color: '#1F2937',
+    bg: '#F3F4F6',
+    border: '#D1D5DB'
+  };
   return (
     <span
       style={{
         backgroundColor: meta.bg,
         color: meta.color,
-        border: `1px solid ${meta.color}55`,
+        border: `1px solid ${meta.border}`,
         padding: '3px 8px',
         borderRadius: '4px',
         fontSize: '11px',

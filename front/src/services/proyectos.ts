@@ -1,8 +1,7 @@
 import type { Catalogos, Proyecto } from '../types';
 import { mockCatalogos, mockProyectos } from './mocks/db';
 
-const PUBLIC_BASE = 'http://localhost/GestionInvestigacionUDB/back/ms-proyectos/public';
-const API_BASE = `${PUBLIC_BASE}/index.php/view`;
+const API_BASE = 'http://localhost/GestionInvestigacionUDB/back/ms-proyectos/public/index.php/view';
 
 export interface RespuestaApi {
   success?: boolean;
@@ -10,14 +9,6 @@ export interface RespuestaApi {
   data?: Proyecto;
   error?: string;
 }
-
-export const obtenerUrlPdf = (relativePath?: string | null): string => {
-  if (!relativePath) return '#';
-  if (relativePath.startsWith('http://') || relativePath.startsWith('https://')) {
-    return relativePath;
-  }
-  return `${PUBLIC_BASE}/${relativePath.replace(/^\/+/, '')}`;
-};
 
 export const proyectosService = {
   async obtenerCatalogos(): Promise<Catalogos> {
@@ -43,13 +34,12 @@ export const proyectosService = {
     }
   },
 
-  async radicar(payload: FormData | Record<string, unknown>): Promise<RespuestaApi> {
+  async radicar(payload: Record<string, unknown>): Promise<RespuestaApi> {
     try {
-      const isFormData = payload instanceof FormData;
       const res = await fetch(`${API_BASE}/proyectos`, {
         method: 'POST',
-        headers: isFormData ? undefined : { 'Content-Type': 'application/json' },
-        body: isFormData ? payload : JSON.stringify(payload)
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
       });
       return (await res.json()) as RespuestaApi;
     } catch {
@@ -83,13 +73,12 @@ export const proyectosService = {
     }
   },
 
-  async subsanar(id: number, payload: FormData | Record<string, unknown>): Promise<RespuestaApi> {
+  async subsanar(id: number, payload: Record<string, unknown>): Promise<RespuestaApi> {
     try {
-      const isFormData = payload instanceof FormData;
       const res = await fetch(`${API_BASE}/proyectos/${id}/subsanar`, {
         method: 'POST',
-        headers: isFormData ? undefined : { 'Content-Type': 'application/json' },
-        body: isFormData ? payload : JSON.stringify(payload)
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
       });
       return (await res.json()) as RespuestaApi;
     } catch {
