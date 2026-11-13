@@ -1,0 +1,21 @@
+# Dependencias Backend (PHP / Composer)
+vendor/
+/back/**/vendor/
+
+# Dependencias y compilados Frontend (Node / Vite)
+node_modules/
+/front/node_modules/
+/front/dist/
+/front/dist-ssr/
+*.local
+
+# Variables de entorno y credenciales
+.env
+.env.*
+!.env.example
+
+# Archivos temporales, logs y sistema operativo
+*.log
+.DS_Store
+Thumbs.db
+.phpunit.result.cache

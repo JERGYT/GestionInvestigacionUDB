@@ -1,0 +1,32 @@
+%PDF-1.4
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >> endobj
+4 0 obj << /Length 471 >> stream
+BT
+/F1 12 Tf
+50 750 Td
+18 TL
+(UNIVERSIDAD DE BOYACA - FACULTAD DE INGENIERIA \(FIAD\)) Tj T*
+(Sistema de Gestion y Trazabilidad de Proyectos Docentes) Tj T*
+(--------------------------------------------------------) Tj T*
+(Proyecto: Red de Sensores IoT para Calidad del Aire en Tunja) Tj T*
+(Version del Documento: v4) Tj T*
+(Fecha de Generacion: 2026-11-13 07:28:47) Tj T*
+(Detalle: Documento vigente del proyecto) Tj T*
+(Archivo Oficial: docs/proyecto3_v4.pdf) Tj T*
+ET
+endstream endobj
+5 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000229 00000 n 
+0000000751 00000 n 
+trailer << /Size 6 /Root 1 0 R >>
+startxref
+821
+%%EOF
