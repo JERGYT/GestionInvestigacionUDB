@@ -70,7 +70,10 @@ class ProyectoRepository {
             $principalId = (int)($datos['investigador_principal_id'] ?? 2);
             $lineaId = (int)($datos['linea_id'] ?? 1);
             $sublineaId = (int)($datos['sublinea_id'] ?? 1);
-            $etapa = $datos['etapa_actual'] ?? 'idea';
+            $etapaInput = strtolower(trim($datos['etapa_actual'] ?? 'idea'));
+            $etapa = in_array($etapaInput, ['idea', 'anteproyecto', 'proyecto', 'desarrollo', 'informe_final'], true)
+                ? $etapaInput
+                : 'idea';
 
             $fechaInput = $datos['fecha_radicacion'] ?? $datos['fecha_evento'] ?? null;
             $fechaRadicacion = $fechaInput ? substr(trim($fechaInput), 0, 10) : date('Y-m-d');
@@ -290,6 +293,52 @@ class ProyectoRepository {
                     $proyecto->rondas_revision = (int)$proyecto->rondas_revision + 1;
                     if ($observaciones === '') {
                         $observaciones = 'Se registra Novedad de CIPADE. El proyecto se devuelve directamente a los investigadores docentes sin pasar por el Comité.';
+                    }
+                    break;
+
+                case 'hito_etica_propiedad':
+                case 'cartas_etica':
+                    $actorId = (int)($datos['actor_id'] ?? 1);
+                    $tipoEvento = 'hito_etica_propiedad';
+                    if ($observaciones === '') {
+                        $observaciones = 'Se registran las Cartas de Aval del Comité de Ética y el Acuerdo de Propiedad Intelectual firmados para la ejecución del proyecto.';
+                    }
+                    break;
+
+                case 'cambio_manual':
+                case 'modo_libre':
+                    $actorId = (int)($datos['actor_id'] ?? 1);
+                    $tipoEvento = 'cambio_manual';
+                    $etapaPreviaManual = $proyecto->etapa_actual;
+                    $estadosPermitidos = [
+                        'en_revision_lider',
+                        'en_revision_investigadores',
+                        'aprobado_lider',
+                        'en_revision_comite',
+                        'en_evaluacion_pares',
+                        'en_standby',
+                        'aprobado_facultad',
+                        'en_desarrollo',
+                        'novedad_cipade',
+                        'archivado'
+                    ];
+                    $etapasPermitidas = ['idea', 'anteproyecto', 'proyecto', 'desarrollo', 'informe_final'];
+
+                    if (!empty($datos['nueva_etapa']) && in_array($datos['nueva_etapa'], $etapasPermitidas, true)) {
+                        $proyecto->etapa_actual = $datos['nueva_etapa'];
+                    }
+                    if (!empty($datos['estado_nuevo']) && in_array($datos['estado_nuevo'], $estadosPermitidos, true)) {
+                        $nuevoEst = $datos['estado_nuevo'];
+                        if (
+                            in_array($nuevoEst, ['en_revision_investigadores', 'novedad_cipade'], true) &&
+                            $nuevoEst !== $estadoAnterior
+                        ) {
+                            $proyecto->rondas_revision = (int)$proyecto->rondas_revision + 1;
+                        }
+                        $proyecto->estado_actual = $nuevoEst;
+                    }
+                    if ($observaciones === '') {
+                        $observaciones = "Ajuste directo de control (Modo Libre): Etapa [{$etapaPreviaManual} → {$proyecto->etapa_actual}], Estado [{$estadoAnterior} → {$proyecto->estado_actual}].";
                     }
                     break;
 

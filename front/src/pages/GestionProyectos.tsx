@@ -2,8 +2,11 @@ import React, { useMemo, useRef, useState } from 'react';
 import {
   ETAPAS_METADATA,
   ESTADOS_METADATA,
+  EVENTOS_METADATA,
   obtenerResponsableActual,
   type Catalogos,
+  type EstadoProyecto,
+  type EtapaProyecto,
   type EvaluacionPar,
   type Proyecto
 } from '../types';
@@ -27,7 +30,13 @@ import {
   History,
   ArrowRight,
   FolderOpen,
-  ShieldAlert
+  ShieldAlert,
+  Sliders,
+  FileCheck2,
+  FileText,
+  Copy,
+  Check,
+  X
 } from 'lucide-react';
 
 interface Props {
@@ -39,23 +48,41 @@ interface Props {
   onProyectoActualizado: (p?: Proyecto) => void;
 }
 
-function calcularDemoraTexto(fechaStr?: string | null): { fechaCorta: string; diasTexto: string } {
+type FiltroKpi = 'todos' | 'lider' | 'investigadores_cipade' | 'comite_pares_standby';
+
+const ORDEN_ETAPAS: { id: EtapaProyecto; num: number; label: string }[] = [
+  { id: 'idea', num: 1, label: 'Idea' },
+  { id: 'anteproyecto', num: 2, label: 'Anteproyecto' },
+  { id: 'proyecto', num: 3, label: 'Proyecto' },
+  { id: 'desarrollo', num: 4, label: 'Desarrollo' },
+  { id: 'informe_final', num: 5, label: 'Informe Final' }
+];
+
+function calcularDiasEnEspera(fechaStr?: string | null): {
+  fechaCorta: string;
+  dias: number;
+  resumenDemora: string;
+} {
   if (!fechaStr) {
-    return { fechaCorta: 'Sin fecha', diasTexto: 'Reciente' };
+    const hoyStr = new Date().toISOString().slice(0, 10);
+    return { fechaCorta: hoyStr, dias: 0, resumenDemora: `0 días en espera desde ${hoyStr}` };
   }
   const fechaCorta = fechaStr.slice(0, 10);
   const partes = fechaCorta.split('-').map(Number);
   if (partes.length !== 3 || partes.some(isNaN)) {
-    return { fechaCorta, diasTexto: 'Registrado' };
+    return { fechaCorta, dias: 0, resumenDemora: `Desde ${fechaCorta}` };
   }
   const fechaMov = new Date(partes[0], partes[1] - 1, partes[2]);
   const hoy = new Date();
   hoy.setHours(0, 0, 0, 0);
   const diffMs = hoy.getTime() - fechaMov.getTime();
-  const dias = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  if (dias <= 0) return { fechaCorta, diasTexto: 'Movimiento hoy' };
-  if (dias === 1) return { fechaCorta, diasTexto: 'Hace 1 día' };
-  return { fechaCorta, diasTexto: `Hace ${dias} días` };
+  const dias = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+  const textoDias = dias === 1 ? '1 día en espera' : `${dias} días en espera`;
+  return {
+    fechaCorta,
+    dias,
+    resumenDemora: `${textoDias} desde ${fechaCorta}`
+  };
 }
 
 function obtenerEtapaSiguienteLabel(etapaActual: Proyecto['etapa_actual']): string {
@@ -332,35 +359,61 @@ const ExpedienteMaestroDetalle: React.FC<ExpedienteDetalleProps> = ({
 }) => {
   const hoyISO = new Date().toISOString().slice(0, 10);
 
-  
-  
+  // Campos comunes de movimiento (Fecha + Observaciones)
   const [fechaMovimiento, setFechaMovimiento] = useState(hoyISO);
   const [observacionMovimiento, setObservacionMovimiento] = useState('');
   const [procesandoAccion, setProcesandoAccion] = useState(false);
   const [mensajeExito, setMensajeExito] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
-  
-  const paresCatalogo = catalogos.pares.length >= 2 ? catalogos.pares : [
-    { id: 5, nombre: 'Dr. Carlos Mendoza (Par 1)', email: 'par1@udeb.edu.co', rol: 'par_evaluador' as const, programa: 'Externo' },
-    { id: 6, nombre: 'Dra. Laura Gómez (Par 2)', email: 'par2@udeb.edu.co', rol: 'par_evaluador' as const, programa: 'Externo' }
-  ];
+  // Selector Rápido: Modo Libre ("Jugar con los Estados")
+  const [mostrarModoLibre, setMostrarModoLibre] = useState(false);
+  const [etapaManual, setEtapaManual] = useState<EtapaProyecto>(proyecto.etapa_actual);
+  const [estadoManual, setEstadoManual] = useState<EstadoProyecto>(proyecto.estado_actual);
+
+  // Filtro de etapa en la Bitácora de Trazabilidad (Columna Derecha)
+  const [filtroEtapaBitacora, setFiltroEtapaBitacora] = useState<'todas' | EtapaProyecto>('todas');
+
+  // Modal de Resumen Ejecutivo para CIPADE
+  const [mostrarModalCipade, setMostrarModalCipade] = useState(false);
+  const [copiadoPortapapeles, setCopiadoPortapapeles] = useState(false);
+
+  // Selección de Pares Evaluadores (Par 1 y Par 2)
+  const paresCatalogo =
+    catalogos.pares.length >= 2
+      ? catalogos.pares
+      : [
+          {
+            id: 5,
+            nombre: 'Dr. Carlos Mendoza (Par 1)',
+            email: 'par1@udeb.edu.co',
+            rol: 'par_evaluador' as const,
+            programa: 'Externo'
+          },
+          {
+            id: 6,
+            nombre: 'Dra. Laura Gómez (Par 2)',
+            email: 'par2@udeb.edu.co',
+            rol: 'par_evaluador' as const,
+            programa: 'Externo'
+          }
+        ];
   const [par1Id, setPar1Id] = useState<number>(paresCatalogo[0]?.id ?? 5);
   const [par2Id, setPar2Id] = useState<number>(paresCatalogo[1]?.id ?? 6);
   const [mostrarReasignarPares, setMostrarReasignarPares] = useState(false);
 
-  
+  // Estado destino cuando se reactiva desde Standby
   const [estadoRetornoStandby, setEstadoRetornoStandby] = useState<string>(
     proyecto.fecha_asignacion_pares ? 'en_evaluacion_pares' : 'en_revision_comite'
   );
 
-  
+  // Campos de edición / subsanación docente
   const [editTitulo, setEditTitulo] = useState(proyecto.titulo);
   const [editResumen, setEditResumen] = useState(proyecto.resumen || '');
   const [editLineaId, setEditLineaId] = useState<number>(proyecto.linea_id);
   const [editSublineaId, setEditSublineaId] = useState<number>(proyecto.sublinea_id);
 
-  
+  // Campos de Gestión de Co-investigadores Docentes
   const [docenteVincularId, setDocenteVincularId] = useState<number>(
     catalogos.docentes.find((d) => d.id !== proyecto.investigador_principal_id)?.id ?? 3
   );
@@ -374,7 +427,7 @@ const ExpedienteMaestroDetalle: React.FC<ExpedienteDetalleProps> = ({
     return filtradas.length > 0 ? filtradas : catalogos.sublineas;
   }, [catalogos.sublineas, editLineaId]);
 
-  
+  // Evaluaciones de pares de la ronda más reciente
   const maxRondaPares = useMemo(() => {
     if (proyecto.evaluaciones_pares.length === 0) return 0;
     return Math.max(...proyecto.evaluaciones_pares.map((e) => e.ronda));
@@ -384,8 +437,89 @@ const ExpedienteMaestroDetalle: React.FC<ExpedienteDetalleProps> = ({
     return proyecto.evaluaciones_pares.filter((e) => e.ronda === maxRondaPares);
   }, [proyecto.evaluaciones_pares, maxRondaPares]);
 
+  // Contadores de carga laboral para la Líder de Grupo
+  const metricasCargaLider = useMemo(() => {
+    const revisionesLider = proyecto.trazabilidad.filter(
+      (t) => t.tipo_evento === 'devolucion_lider' || t.tipo_evento === 'aval_lider'
+    ).length;
+    const conceptosPares = proyecto.trazabilidad.filter(
+      (t) => t.tipo_evento === 'concepto_par' || t.tipo_evento === 'asignacion_pares'
+    ).length;
+    const novedadesCipade = proyecto.trazabilidad.filter(
+      (t) => t.tipo_evento === 'novedad_cipade'
+    ).length;
+    return { revisionesLider, conceptosPares, novedadesCipade };
+  }, [proyecto.trazabilidad]);
+
+  // Historial filtrado por pestaña de etapa
+  const trazabilidadFiltrada = useMemo(() => {
+    if (filtroEtapaBitacora === 'todas') return proyecto.trazabilidad;
+    return proyecto.trazabilidad.filter((t) => t.etapa === filtroEtapaBitacora);
+  }, [proyecto.trazabilidad, filtroEtapaBitacora]);
+
   const infoResponsable = obtenerResponsableActual(proyecto.estado_actual);
+  const fechaUltMov = proyecto.trazabilidad?.[0]?.fecha_evento ?? proyecto.fecha_radicacion;
+  const infoDemoraActual = calcularDiasEnEspera(fechaUltMov);
   const etapaSiguienteTexto = obtenerEtapaSiguienteLabel(proyecto.etapa_actual);
+  const indiceEtapaActual = ORDEN_ETAPAS.findIndex((e) => e.id === proyecto.etapa_actual);
+
+  // Texto del Informe Ejecutivo para CIPADE
+  const textoResumenCipade = useMemo(() => {
+    const equipoActivos = proyecto.equipo
+      .filter((m) => m.activo)
+      .map((m) => `${m.nombre} (${m.rol_equipo.toUpperCase()})`)
+      .join(', ');
+
+    const lineasHistorial = [...proyecto.trazabilidad]
+      .reverse()
+      .map(
+        (ev, idx) =>
+          `${idx + 1}. [${ev.fecha_evento.slice(0, 10)}] Etapa: ${ev.etapa.toUpperCase()} | Evento: ${
+            EVENTOS_METADATA[ev.tipo_evento]?.label ?? ev.tipo_evento
+          } | Estado: ${ESTADOS_METADATA[ev.estado_nuevo]?.label ?? ev.estado_nuevo}\n   Responsable: ${
+            ev.actor_nombre
+          }\n   Detalle: ${ev.observaciones}`
+      )
+      .join('\n\n');
+
+    return [
+      '====================================================================',
+      'UNIVERSIDAD DE BOYACÁ - FACULTAD DE CIENCIAS E INGENIERÍA (FIAD)',
+      'INFORME EJECUTIVO DE TRAZABILIDAD Y SEGUIMIENTO PARA CIPADE',
+      '====================================================================',
+      `EXPEDIENTE DOCENTE : #${proyecto.id}`,
+      `TÍTULO DEL PROYECTO: ${proyecto.titulo}`,
+      `LÍNEA / SUBLÍNEA   : ${proyecto.linea_investigacion} / ${proyecto.sublinea}`,
+      `EQUIPO INVESTIGADOR: ${equipoActivos || proyecto.investigador_principal}`,
+      `FECHA RADICACIÓN   : ${proyecto.fecha_radicacion}`,
+      '--------------------------------------------------------------------',
+      'ESTADO Y RESPONSABLE ACTUAL:',
+      `• Macro-Etapa Actual   : ${ETAPAS_METADATA[proyecto.etapa_actual].label}`,
+      `• Estado en el Flujo   : ${ESTADOS_METADATA[proyecto.estado_actual].label}`,
+      `• Responsable en Turno : ${infoResponsable.responsable} (${infoDemoraActual.resumenDemora})`,
+      '--------------------------------------------------------------------',
+      'INDICADORES DE GESTIÓN Y CARGA DE REVISIÓN:',
+      `• Rondas de Devolución / Subsanación : ${proyecto.rondas_revision}`,
+      `• Intervenciones Líder de Grupo      : ${metricasCargaLider.revisionesLider}`,
+      `• Gestiones y Conceptos de Pares     : ${metricasCargaLider.conceptosPares}`,
+      `• Novedades Reportadas por CIPADE    : ${metricasCargaLider.novedadesCipade}`,
+      `• Total Movimientos en Bitácora      : ${proyecto.trazabilidad.length}`,
+      '--------------------------------------------------------------------',
+      'CRONOLOGÍA DETALLADA DE MOVIMIENTOS Y OBSERVACIONES:',
+      lineasHistorial,
+      '===================================================================='
+    ].join('\n');
+  }, [proyecto, infoResponsable, infoDemoraActual, metricasCargaLider]);
+
+  const copiarResumenAlPortapapeles = async () => {
+    try {
+      await navigator.clipboard.writeText(textoResumenCipade);
+      setCopiadoPortapapeles(true);
+      setTimeout(() => setCopiadoPortapapeles(false), 2500);
+    } catch {
+      setCopiadoPortapapeles(false);
+    }
+  };
 
   const ejecutarTransicion = async (
     accion: string,
@@ -418,7 +552,9 @@ const ExpedienteMaestroDetalle: React.FC<ExpedienteDetalleProps> = ({
     } else {
       setObservacionMovimiento('');
       setMostrarReasignarPares(false);
-      setMensajeExito(exitoTexto || res.message || 'Estado actualizado en la bitácora de trazabilidad.');
+      setMensajeExito(
+        exitoTexto || res.message || 'Estado actualizado en la bitácora de trazabilidad.'
+      );
       onProyectoActualizado(res.data);
     }
   };
@@ -522,6 +658,136 @@ const ExpedienteMaestroDetalle: React.FC<ExpedienteDetalleProps> = ({
         padding: '22px 24px'
       }}
     >
+      {/* =========================================================================
+          STEPPER HORIZONTAL DE LAS 5 MACRO-ETAPAS
+         ========================================================================= */}
+      <div
+        style={{
+          backgroundColor: '#F9FAFB',
+          border: '1px solid #E5E7EB',
+          borderRadius: '10px',
+          padding: '14px 18px',
+          marginBottom: '18px'
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '10px',
+            flexWrap: 'wrap',
+            gap: '8px'
+          }}
+        >
+          <span
+            style={{
+              fontSize: '11px',
+              fontWeight: 800,
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+              color: '#374151'
+            }}
+          >
+            Progreso de Macro-Etapas del Proyecto Docente
+          </span>
+          <span style={{ fontSize: '11.5px', color: '#4B5563' }}>
+            Etapa activa:{' '}
+            <strong style={{ color: '#C8102E' }}>
+              {ETAPAS_METADATA[proyecto.etapa_actual].label}
+            </strong>
+          </span>
+        </div>
+
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(5, 1fr)',
+            gap: '10px'
+          }}
+        >
+          {ORDEN_ETAPAS.map((etapaItem, idx) => {
+            const esSuperada = idx < indiceEtapaActual;
+            const esActual = idx === indiceEtapaActual;
+            return (
+              <div
+                key={etapaItem.id}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '9px',
+                  padding: '9px 12px',
+                  borderRadius: '8px',
+                  backgroundColor: esActual
+                    ? '#FEF2F2'
+                    : esSuperada
+                    ? '#ECFDF5'
+                    : '#FFFFFF',
+                  border: esActual
+                    ? '2px solid #C8102E'
+                    : esSuperada
+                    ? '1px solid #10B981'
+                    : '1px solid #E5E7EB'
+                }}
+              >
+                <div
+                  style={{
+                    width: '24px',
+                    height: '24px',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '11.5px',
+                    fontWeight: 800,
+                    flexShrink: 0,
+                    backgroundColor: esActual
+                      ? '#C8102E'
+                      : esSuperada
+                      ? '#059669'
+                      : '#E5E7EB',
+                    color: esActual || esSuperada ? '#FFFFFF' : '#6B7280'
+                  }}
+                >
+                  {esSuperada ? '✓' : etapaItem.num}
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <div
+                    style={{
+                      fontSize: '12px',
+                      fontWeight: esActual ? 800 : 700,
+                      color: esActual
+                        ? '#C8102E'
+                        : esSuperada
+                        ? '#065F46'
+                        : '#6B7280',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis'
+                    }}
+                  >
+                    {etapaItem.num}. {etapaItem.label}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: '10px',
+                      color: esActual
+                        ? '#9E0B22'
+                        : esSuperada
+                        ? '#047857'
+                        : '#9CA3AF',
+                      fontWeight: 600
+                    }}
+                  >
+                    {esActual ? 'Etapa Actual' : esSuperada ? 'Superada' : 'Pendiente'}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Cabecera del Expediente Abierto */}
       <div
         style={{
@@ -607,14 +873,14 @@ const ExpedienteMaestroDetalle: React.FC<ExpedienteDetalleProps> = ({
           </div>
         </div>
 
-        {/* Tarjeta de Responsable Actual */}
+        {/* Tarjeta de Responsable Actual + Días en espera */}
         <div
           style={{
             backgroundColor: infoResponsable.bg,
             border: `1px solid ${infoResponsable.border}`,
             borderRadius: '8px',
             padding: '10px 14px',
-            minWidth: '240px'
+            minWidth: '265px'
           }}
         >
           <div
@@ -626,10 +892,17 @@ const ExpedienteMaestroDetalle: React.FC<ExpedienteDetalleProps> = ({
               letterSpacing: '0.04em'
             }}
           >
-            Responsable Actual del Movimiento
+            Responsable Actual • Demora
           </div>
-          <div style={{ fontSize: '14px', fontWeight: 800, color: infoResponsable.text, marginTop: '2px' }}>
-            {infoResponsable.responsable}
+          <div
+            style={{
+              fontSize: '13.5px',
+              fontWeight: 800,
+              color: infoResponsable.text,
+              marginTop: '2px'
+            }}
+          >
+            {infoResponsable.responsable} • {infoDemoraActual.resumenDemora}
           </div>
           <div style={{ fontSize: '11.5px', color: '#374151', marginTop: '2px' }}>
             {infoResponsable.accionRequerida}
@@ -690,7 +963,7 @@ const ExpedienteMaestroDetalle: React.FC<ExpedienteDetalleProps> = ({
         }}
       >
         {/* =======================================================================
-            COLUMNA IZQUIERDA: CONTROL DE ESTADOS, PARES, SUBSANACIÓN Y EQUIPO
+            COLUMNA IZQUIERDA: CONTROL DE ESTADOS, MODO LIBRE, PARES, SUBSANACIÓN Y EQUIPO
            ======================================================================= */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
           {/* Panel Contextual de Control de Estados */}
@@ -713,24 +986,33 @@ const ExpedienteMaestroDetalle: React.FC<ExpedienteDetalleProps> = ({
               }}
             >
               <h3 style={{ margin: 0, fontSize: '15px', color: '#1F2937' }}>
-                1. Control de Estado y Dictámenes ({ETAPAS_METADATA[proyecto.etapa_actual].label})
+                1. Control Guiado de Estado ({ETAPAS_METADATA[proyecto.etapa_actual].label})
               </h3>
-              <span
+              <button
+                type="button"
+                onClick={() => setMostrarModoLibre((prev) => !prev)}
                 style={{
+                  backgroundColor: mostrarModoLibre ? '#27272A' : '#FEF9E7',
+                  color: mostrarModoLibre ? '#FFFFFF' : '#8A6A10',
+                  border: mostrarModoLibre ? '1px solid #27272A' : '1px solid #C59B27',
+                  padding: '5px 10px',
+                  borderRadius: '6px',
                   fontSize: '11px',
                   fontWeight: 700,
-                  color: '#C8102E',
-                  backgroundColor: '#FEE2E2',
-                  border: '1px solid #FCA5A5',
-                  padding: '2px 8px',
-                  borderRadius: '999px'
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px'
                 }}
               >
-                Acciones habilitadas según estado
-              </span>
+                <Sliders size={13} />
+                {mostrarModoLibre
+                  ? 'Ocultar Modo Libre'
+                  : 'Cambio Manual de Estado / Etapa (Modo Libre)'}
+              </button>
             </div>
 
-            {/* Selector común de Fecha del Movimiento y Observaciones (excepto cuando es formulario propio de subsanación) */}
+            {/* Selector común de Fecha del Movimiento y Observaciones */}
             {proyecto.estado_actual !== 'en_revision_investigadores' &&
               proyecto.estado_actual !== 'novedad_cipade' && (
                 <div
@@ -808,6 +1090,132 @@ const ExpedienteMaestroDetalle: React.FC<ExpedienteDetalleProps> = ({
                   </div>
                 </div>
               )}
+
+            {/* BLOQUE DESPLEGABLE: CAMBIO MANUAL DE ESTADO / ETAPA (MODO LIBRE) */}
+            {mostrarModoLibre && (
+              <div
+                style={{
+                  backgroundColor: '#FEF9E7',
+                  border: '1px solid #C59B27',
+                  borderLeft: '4px solid #C59B27',
+                  borderRadius: '8px',
+                  padding: '14px',
+                  marginBottom: '16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px'
+                }}
+              >
+                <div style={{ fontSize: '12.5px', fontWeight: 800, color: '#8A6A10' }}>
+                  Cambio Manual de Estado / Etapa (Modo Libre — "Jugar con los Estados")
+                </div>
+                <div style={{ fontSize: '11.5px', color: '#4B5563' }}>
+                  Permite a la Líder de Grupo ubicar el proyecto en cualquier etapa o estado en un solo paso,
+                  registrando la fecha y observación en la bitácora.
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr auto', gap: '10px', alignItems: 'end' }}>
+                  <div>
+                    <label
+                      style={{
+                        display: 'block',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        color: '#1F2937',
+                        marginBottom: '4px'
+                      }}
+                    >
+                      Macro-Etapa Destino:
+                    </label>
+                    <select
+                      value={etapaManual}
+                      onChange={(e) => setEtapaManual(e.target.value as EtapaProyecto)}
+                      style={{
+                        width: '100%',
+                        backgroundColor: '#FFFFFF',
+                        color: '#1F2937',
+                        border: '1px solid #D1D5DB',
+                        borderRadius: '6px',
+                        padding: '8px 10px',
+                        fontSize: '12px',
+                        fontWeight: 600
+                      }}
+                    >
+                      <option value="idea">1. Idea</option>
+                      <option value="anteproyecto">2. Anteproyecto</option>
+                      <option value="proyecto">3. Proyecto Formal</option>
+                      <option value="desarrollo">4. Desarrollo del Proyecto</option>
+                      <option value="informe_final">5. Informe Final</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label
+                      style={{
+                        display: 'block',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        color: '#1F2937',
+                        marginBottom: '4px'
+                      }}
+                    >
+                      Estado Destino:
+                    </label>
+                    <select
+                      value={estadoManual}
+                      onChange={(e) => setEstadoManual(e.target.value as EstadoProyecto)}
+                      style={{
+                        width: '100%',
+                        backgroundColor: '#FFFFFF',
+                        color: '#1F2937',
+                        border: '1px solid #D1D5DB',
+                        borderRadius: '6px',
+                        padding: '8px 10px',
+                        fontSize: '12px',
+                        fontWeight: 600
+                      }}
+                    >
+                      <option value="en_revision_lider">En Revisión Líder</option>
+                      <option value="en_revision_investigadores">Devuelto a Investigadores (Con Obs.)</option>
+                      <option value="en_revision_comite">En Revisión Comité</option>
+                      <option value="en_evaluacion_pares">En Evaluación de Pares</option>
+                      <option value="en_standby">En Standby (Vacaciones Dic/Feb)</option>
+                      <option value="aprobado_facultad">Aprobado Nivel Facultad</option>
+                      <option value="en_desarrollo">En Desarrollo</option>
+                      <option value="novedad_cipade">Novedad CIPADE (En Subsanación)</option>
+                      <option value="archivado">Archivado</option>
+                    </select>
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={procesandoAccion}
+                    onClick={() =>
+                      ejecutarTransicion(
+                        'cambio_manual',
+                        {
+                          actor_id: 1,
+                          nueva_etapa: etapaManual,
+                          estado_nuevo: estadoManual
+                        },
+                        `Cambio manual aplicado: Etapa ${ETAPAS_METADATA[etapaManual].label} · Estado ${ESTADOS_METADATA[estadoManual].label}.`
+                      )
+                    }
+                    className="ub-btn-primary"
+                    style={{
+                      padding: '8px 14px',
+                      borderRadius: '6px',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    Aplicar Cambio Directo
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* CASO A: EN REVISIÓN LÍDER */}
             {proyecto.estado_actual === 'en_revision_lider' && (
@@ -1141,7 +1549,7 @@ const ExpedienteMaestroDetalle: React.FC<ExpedienteDetalleProps> = ({
                       color: '#6B7280'
                     }}
                   >
-                    No hay pares registrados en esta ronda. Use el botón "Asignar / Reasignar Pares" abajo.
+                    No hay pares registrados en esta ronda. Use el botón "Reasignar Pares" abajo.
                   </div>
                 )}
 
@@ -1666,7 +2074,7 @@ const ExpedienteMaestroDetalle: React.FC<ExpedienteDetalleProps> = ({
               </form>
             )}
 
-            {/* CASO F: EN DESARROLLO (NOVEDADES DE CIPADE O CIERRE A INFORME FINAL) */}
+            {/* CASO F: EN DESARROLLO (NOVEDADES DE CIPADE, HITO ÉTICA/PROPIEDAD O CIERRE A INFORME FINAL) */}
             {proyecto.estado_actual === 'en_desarrollo' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 <div
@@ -1680,10 +2088,10 @@ const ExpedienteMaestroDetalle: React.FC<ExpedienteDetalleProps> = ({
                     lineHeight: 1.45
                   }}
                 >
-                  <strong>Proyecto en Etapa de Desarrollo:</strong> Desde aquí puede registrar una{' '}
-                  <strong>Novedad de CIPADE</strong> (que devuelve el proyecto directamente a los investigadores sin
-                  pasar por el Comité, y al subsanarse regresa directo a Desarrollo) o aprobar el cierre pasando a{' '}
-                  <strong>Informe Final</strong>.
+                  <strong>Proyecto en Etapa de Desarrollo:</strong> Puede registrar las{' '}
+                  <strong>Cartas de Comité de Ética y Propiedad Intelectual</strong>, reportar una{' '}
+                  <strong>Novedad de CIPADE</strong> (que devuelve directo a los investigadores sin pasar por Comité) o
+                  aprobar el cierre pasando a <strong>Informe Final</strong>.
                 </div>
 
                 <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
@@ -1702,7 +2110,7 @@ const ExpedienteMaestroDetalle: React.FC<ExpedienteDetalleProps> = ({
                       flex: 1.2,
                       borderRadius: '8px',
                       padding: '11px 14px',
-                      fontSize: '12.5px',
+                      fontSize: '12px',
                       fontWeight: 700,
                       cursor: 'pointer',
                       display: 'inline-flex',
@@ -1711,7 +2119,36 @@ const ExpedienteMaestroDetalle: React.FC<ExpedienteDetalleProps> = ({
                       gap: '7px'
                     }}
                   >
-                    <ShieldAlert size={16} /> Registrar Novedad de CIPADE (Directo a Investigadores)
+                    <ShieldAlert size={16} /> Registrar Novedad de CIPADE
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={procesandoAccion}
+                    onClick={() =>
+                      ejecutarTransicion(
+                        'hito_etica_propiedad',
+                        { actor_id: 1 },
+                        'Hito de Cartas de Comité de Ética y Propiedad Intelectual registrado en la bitácora.'
+                      )
+                    }
+                    style={{
+                      flex: 1.2,
+                      backgroundColor: '#FEF9E7',
+                      color: '#8A6A10',
+                      border: '1px solid #C59B27',
+                      borderRadius: '8px',
+                      padding: '11px 14px',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '7px'
+                    }}
+                  >
+                    <FileCheck2 size={16} /> Registrar Cartas Comité de Ética y Propiedad Intelectual
                   </button>
 
                   <button
@@ -1731,7 +2168,7 @@ const ExpedienteMaestroDetalle: React.FC<ExpedienteDetalleProps> = ({
                       border: 'none',
                       borderRadius: '8px',
                       padding: '11px 14px',
-                      fontSize: '12.5px',
+                      fontSize: '12px',
                       fontWeight: 700,
                       cursor: 'pointer',
                       display: 'inline-flex',
@@ -1755,42 +2192,70 @@ const ExpedienteMaestroDetalle: React.FC<ExpedienteDetalleProps> = ({
                   borderRadius: '8px',
                   padding: '14px',
                   display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  gap: '12px',
-                  flexWrap: 'wrap'
+                  flexDirection: 'column',
+                  gap: '12px'
                 }}
               >
                 <div style={{ fontSize: '12.5px', color: '#065F46' }}>
                   <strong>Expediente Aprobado a Nivel de Facultad</strong> en etapa{' '}
-                  <strong>{ETAPAS_METADATA[proyecto.etapa_actual].label}</strong>.
+                  <strong>{ETAPAS_METADATA[proyecto.etapa_actual].label}</strong>. Puede dejar constancia de las Cartas
+                  de Ética y Propiedad Intelectual o iniciar Desarrollo.
                 </div>
 
-                {proyecto.etapa_actual !== 'informe_final' && (
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                   <button
                     type="button"
                     disabled={procesandoAccion}
                     onClick={() =>
                       ejecutarTransicion(
-                        'inicio_desarrollo',
-                        { actor_id: 4 },
-                        'El proyecto pasó a etapa de Desarrollo.'
+                        'hito_etica_propiedad',
+                        { actor_id: 1 },
+                        'Hito de Cartas de Comité de Ética y Propiedad Intelectual registrado en la bitácora.'
                       )
                     }
                     style={{
-                      backgroundColor: '#047857',
-                      color: '#FFFFFF',
-                      border: 'none',
+                      backgroundColor: '#FEF9E7',
+                      color: '#8A6A10',
+                      border: '1px solid #C59B27',
                       borderRadius: '6px',
-                      padding: '8px 14px',
+                      padding: '9px 14px',
                       fontSize: '12px',
                       fontWeight: 700,
-                      cursor: 'pointer'
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px'
                     }}
                   >
-                    Pasar a Etapa de Desarrollo
+                    <FileCheck2 size={15} /> Registrar Cartas Comité de Ética y Propiedad Intelectual
                   </button>
-                )}
+
+                  {proyecto.etapa_actual !== 'informe_final' && (
+                    <button
+                      type="button"
+                      disabled={procesandoAccion}
+                      onClick={() =>
+                        ejecutarTransicion(
+                          'inicio_desarrollo',
+                          { actor_id: 4 },
+                          'El proyecto pasó a etapa de Desarrollo.'
+                        )
+                      }
+                      style={{
+                        backgroundColor: '#047857',
+                        color: '#FFFFFF',
+                        border: 'none',
+                        borderRadius: '6px',
+                        padding: '9px 14px',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Pasar a Etapa de Desarrollo
+                    </button>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -2065,7 +2530,7 @@ const ExpedienteMaestroDetalle: React.FC<ExpedienteDetalleProps> = ({
         </div>
 
         {/* =======================================================================
-            COLUMNA DERECHA: BITÁCORA DE TRAZABILIDAD EN VIVO
+            COLUMNA DERECHA: BITÁCORA ENRIQUECIDA Y RESUMEN PARA CIPADE
            ======================================================================= */}
         <div
           style={{
@@ -2073,8 +2538,9 @@ const ExpedienteMaestroDetalle: React.FC<ExpedienteDetalleProps> = ({
             padding: '18px 20px',
             borderRadius: '10px',
             border: '1px solid #E5E7EB',
-            maxHeight: '780px',
-            overflowY: 'auto'
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '14px'
           }}
         >
           <div
@@ -2082,9 +2548,8 @@ const ExpedienteMaestroDetalle: React.FC<ExpedienteDetalleProps> = ({
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
-              marginBottom: '16px',
-              paddingBottom: '10px',
-              borderBottom: '1px solid #E5E7EB'
+              gap: '10px',
+              flexWrap: 'wrap'
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -2093,158 +2558,394 @@ const ExpedienteMaestroDetalle: React.FC<ExpedienteDetalleProps> = ({
                 Bitácora de Trazabilidad en Vivo
               </h3>
             </div>
-            <span
+
+            <button
+              type="button"
+              onClick={() => setMostrarModalCipade(true)}
+              className="ub-btn-primary"
               style={{
-                backgroundColor: '#FFFFFF',
-                border: '1px solid #D1D5DB',
-                color: '#374151',
-                padding: '3px 9px',
-                borderRadius: '999px',
-                fontSize: '11px',
-                fontWeight: 700
+                padding: '6px 12px',
+                borderRadius: '6px',
+                fontSize: '11.5px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px'
               }}
             >
-              {proyecto.trazabilidad.length} movimientos
-            </span>
+              <FileText size={14} /> Generar Resumen para CIPADE
+            </button>
           </div>
 
+          {/* 3 Contadores para justificar la carga laboral de la Líder */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+            <div
+              style={{
+                backgroundColor: '#FFFFFF',
+                border: '1px solid #E5E7EB',
+                borderTop: '3px solid #C8102E',
+                borderRadius: '7px',
+                padding: '8px 10px',
+                textAlign: 'center'
+              }}
+            >
+              <div style={{ fontSize: '16px', fontWeight: 800, color: '#C8102E' }}>
+                {metricasCargaLider.revisionesLider}
+              </div>
+              <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#4B5563' }}>
+                Revisiones Líder
+              </div>
+            </div>
+
+            <div
+              style={{
+                backgroundColor: '#FFFFFF',
+                border: '1px solid #E5E7EB',
+                borderTop: '3px solid #C59B27',
+                borderRadius: '7px',
+                padding: '8px 10px',
+                textAlign: 'center'
+              }}
+            >
+              <div style={{ fontSize: '16px', fontWeight: 800, color: '#8A6A10' }}>
+                {metricasCargaLider.conceptosPares}
+              </div>
+              <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#4B5563' }}>
+                Conceptos Pares
+              </div>
+            </div>
+
+            <div
+              style={{
+                backgroundColor: '#FFFFFF',
+                border: '1px solid #E5E7EB',
+                borderTop: '3px solid #9E0B22',
+                borderRadius: '7px',
+                padding: '8px 10px',
+                textAlign: 'center'
+              }}
+            >
+              <div style={{ fontSize: '16px', fontWeight: 800, color: '#9E0B22' }}>
+                {metricasCargaLider.novedadesCipade}
+              </div>
+              <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#4B5563' }}>
+                Novedades CIPADE
+              </div>
+            </div>
+          </div>
+
+          {/* Pestañas pequeñas para filtrar el historial por etapa */}
           <div
             style={{
-              position: 'relative',
-              paddingLeft: '20px',
-              borderLeft: '2px solid #D1D5DB',
+              display: 'flex',
+              gap: '5px',
+              flexWrap: 'wrap',
+              paddingBottom: '10px',
+              borderBottom: '1px solid #E5E7EB'
+            }}
+          >
+            {(
+              [
+                { id: 'todas', label: `Todas (${proyecto.trazabilidad.length})` },
+                { id: 'idea', label: 'Idea' },
+                { id: 'anteproyecto', label: 'Anteproyecto' },
+                { id: 'proyecto', label: 'Proyecto' },
+                { id: 'desarrollo', label: 'Desarrollo' }
+              ] as const
+            ).map((tab) => {
+              const activa = filtroEtapaBitacora === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setFiltroEtapaBitacora(tab.id)}
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: '999px',
+                    fontSize: '11px',
+                    fontWeight: activa ? 800 : 600,
+                    cursor: 'pointer',
+                    backgroundColor: activa ? '#C8102E' : '#FFFFFF',
+                    color: activa ? '#FFFFFF' : '#4B5563',
+                    border: activa ? '1px solid #C8102E' : '1px solid #D1D5DB'
+                  }}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Línea de tiempo cronológica */}
+          <div
+            style={{
+              maxHeight: '610px',
+              overflowY: 'auto',
+              paddingRight: '4px'
+            }}
+          >
+            <div
+              style={{
+                position: 'relative',
+                paddingLeft: '20px',
+                borderLeft: '2px solid #D1D5DB',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '14px'
+              }}
+            >
+              {trazabilidadFiltrada.map((evento, index) => {
+                const esReciente = index === 0 && filtroEtapaBitacora === 'todas';
+                return (
+                  <div
+                    key={evento.id}
+                    style={{
+                      position: 'relative',
+                      backgroundColor: '#FFFFFF',
+                      padding: '13px 15px',
+                      borderRadius: '8px',
+                      border: esReciente ? '1px solid #C8102E' : '1px solid #E5E7EB',
+                      boxShadow: esReciente
+                        ? '0 2px 6px rgba(200, 16, 46, 0.08)'
+                        : '0 1px 2px rgba(0, 0, 0, 0.03)'
+                    }}
+                  >
+                    <div
+                      style={{
+                        position: 'absolute',
+                        left: '-27px',
+                        top: '16px',
+                        width: '12px',
+                        height: '12px',
+                        borderRadius: '50%',
+                        backgroundColor: esReciente ? '#C8102E' : '#C59B27',
+                        border: '2px solid #FFFFFF'
+                      }}
+                    />
+
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        gap: '8px',
+                        flexWrap: 'wrap',
+                        marginBottom: '6px'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                        <BadgeEvento tipo={evento.tipo_evento} />
+                        {esReciente && (
+                          <span
+                            style={{
+                              backgroundColor: '#FEE2E2',
+                              color: '#9E0B22',
+                              border: '1px solid #FCA5A5',
+                              fontSize: '10px',
+                              fontWeight: 800,
+                              padding: '1px 6px',
+                              borderRadius: '4px',
+                              textTransform: 'uppercase'
+                            }}
+                          >
+                            Último
+                          </span>
+                        )}
+                      </div>
+
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          fontSize: '11.5px',
+                          color: '#374151',
+                          fontFamily: 'monospace',
+                          fontWeight: 700,
+                          backgroundColor: '#F3F4F6',
+                          padding: '2px 7px',
+                          borderRadius: '4px'
+                        }}
+                      >
+                        <Clock size={11} color="#C8102E" /> {evento.fecha_evento}
+                      </span>
+                    </div>
+
+                    <p
+                      style={{
+                        margin: '6px 0 8px 0',
+                        fontSize: '12.5px',
+                        color: '#1F2937',
+                        lineHeight: 1.45
+                      }}
+                    >
+                      {evento.observaciones}
+                    </p>
+
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                        gap: '8px',
+                        paddingTop: '7px',
+                        borderTop: '1px dashed #E5E7EB',
+                        fontSize: '11px',
+                        color: '#6B7280'
+                      }}
+                    >
+                      <span>
+                        Por: <strong style={{ color: '#1F2937' }}>{evento.actor_nombre}</strong> · Etapa:{' '}
+                        <strong style={{ color: '#8A6A10', textTransform: 'uppercase' }}>
+                          {evento.etapa}
+                        </strong>
+                      </span>
+
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        {evento.estado_anterior ? (
+                          <>
+                            <span>
+                              {ESTADOS_METADATA[evento.estado_anterior]?.label ?? evento.estado_anterior}
+                            </span>
+                            <ArrowRight size={11} color="#9CA3AF" />
+                          </>
+                        ) : null}
+                        <strong style={{ color: '#1F2937' }}>
+                          {ESTADOS_METADATA[evento.estado_nuevo]?.label ?? evento.estado_nuevo}
+                        </strong>
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {trazabilidadFiltrada.length === 0 && (
+                <div style={{ padding: '18px', textAlign: 'center', color: '#6B7280', fontSize: '12px' }}>
+                  No hay eventos registrados en la etapa seleccionada.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* =========================================================================
+          MODAL DE INFORME EJECUTIVO PARA CIPADE
+         ========================================================================= */}
+      {mostrarModalCipade && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(17, 24, 39, 0.55)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 999,
+            padding: '20px'
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '12px',
+              borderTop: '4px solid #C8102E',
+              maxWidth: '720px',
+              width: '100%',
+              padding: '22px 24px',
+              boxShadow: '0 20px 35px rgba(0, 0, 0, 0.25)',
               display: 'flex',
               flexDirection: 'column',
               gap: '14px'
             }}
           >
-            {proyecto.trazabilidad.map((evento, index) => {
-              const esReciente = index === 0;
-              return (
-                <div
-                  key={evento.id}
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: '12px'
+              }}
+            >
+              <div>
+                <span
                   style={{
-                    position: 'relative',
-                    backgroundColor: '#FFFFFF',
-                    padding: '13px 15px',
-                    borderRadius: '8px',
-                    border: esReciente ? '1px solid #C8102E' : '1px solid #E5E7EB',
-                    boxShadow: esReciente
-                      ? '0 2px 6px rgba(200, 16, 46, 0.08)'
-                      : '0 1px 2px rgba(0, 0, 0, 0.03)'
+                    fontSize: '10.5px',
+                    fontWeight: 800,
+                    color: '#C8102E',
+                    textTransform: 'uppercase'
                   }}
                 >
-                  {/* Punto en la línea de tiempo */}
-                  <div
-                    style={{
-                      position: 'absolute',
-                      left: '-27px',
-                      top: '16px',
-                      width: '12px',
-                      height: '12px',
-                      borderRadius: '50%',
-                      backgroundColor: esReciente ? '#C8102E' : '#C59B27',
-                      border: '2px solid #FFFFFF'
-                    }}
-                  />
+                  Reporte Oficial de Seguimiento FIAD
+                </span>
+                <h3 style={{ margin: '2px 0 0 0', fontSize: '17px', color: '#1F2937' }}>
+                  Resumen Ejecutivo de Trazabilidad para CIPADE
+                </h3>
+              </div>
 
-                  <div
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      gap: '8px',
-                      flexWrap: 'wrap',
-                      marginBottom: '6px'
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                      <BadgeEvento tipo={evento.tipo_evento} />
-                      {esReciente && (
-                        <span
-                          style={{
-                            backgroundColor: '#FEE2E2',
-                            color: '#9E0B22',
-                            border: '1px solid #FCA5A5',
-                            fontSize: '10px',
-                            fontWeight: 800,
-                            padding: '1px 6px',
-                            borderRadius: '4px',
-                            textTransform: 'uppercase'
-                          }}
-                        >
-                          Último
-                        </span>
-                      )}
-                    </div>
+              <button
+                type="button"
+                onClick={() => setMostrarModalCipade(false)}
+                className="ub-btn-neutral"
+                style={{
+                  padding: '6px 10px',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  fontSize: '12px',
+                  fontWeight: 700
+                }}
+              >
+                <X size={15} /> Cerrar
+              </button>
+            </div>
 
-                    <span
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        fontSize: '11.5px',
-                        color: '#374151',
-                        fontFamily: 'monospace',
-                        fontWeight: 700,
-                        backgroundColor: '#F3F4F6',
-                        padding: '2px 7px',
-                        borderRadius: '4px'
-                      }}
-                    >
-                      <Clock size={11} color="#C8102E" /> {evento.fecha_evento}
-                    </span>
-                  </div>
+            <textarea
+              readOnly
+              value={textoResumenCipade}
+              rows={15}
+              style={{
+                width: '100%',
+                backgroundColor: '#F9FAFB',
+                color: '#1F2937',
+                border: '1px solid #D1D5DB',
+                borderRadius: '8px',
+                padding: '12px 14px',
+                fontFamily: 'monospace',
+                fontSize: '11.5px',
+                lineHeight: 1.5
+              }}
+            />
 
-                  <p
-                    style={{
-                      margin: '6px 0 8px 0',
-                      fontSize: '12.5px',
-                      color: '#1F2937',
-                      lineHeight: 1.45
-                    }}
-                  >
-                    {evento.observaciones}
-                  </p>
-
-                  <div
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      flexWrap: 'wrap',
-                      gap: '8px',
-                      paddingTop: '7px',
-                      borderTop: '1px dashed #E5E7EB',
-                      fontSize: '11px',
-                      color: '#6B7280'
-                    }}
-                  >
-                    <span>
-                      Por: <strong style={{ color: '#1F2937' }}>{evento.actor_nombre}</strong> · Etapa:{' '}
-                      <strong style={{ color: '#8A6A10', textTransform: 'uppercase' }}>
-                        {evento.etapa}
-                      </strong>
-                    </span>
-
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                      {evento.estado_anterior ? (
-                        <>
-                          <span>{ESTADOS_METADATA[evento.estado_anterior]?.label ?? evento.estado_anterior}</span>
-                          <ArrowRight size={11} color="#9CA3AF" />
-                        </>
-                      ) : null}
-                      <strong style={{ color: '#1F2937' }}>
-                        {ESTADOS_METADATA[evento.estado_nuevo]?.label ?? evento.estado_nuevo}
-                      </strong>
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button
+                type="button"
+                onClick={() => void copiarResumenAlPortapapeles()}
+                className="ub-btn-primary"
+                style={{
+                  padding: '9px 16px',
+                  borderRadius: '8px',
+                  fontSize: '12.5px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                {copiadoPortapapeles ? <Check size={15} /> : <Copy size={15} />}
+                {copiadoPortapapeles
+                  ? '¡Informe Copiado al Portapapeles!'
+                  : 'Copiar Informe para Correo / CIPADE'}
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </section>
   );
 };
@@ -2257,17 +2958,50 @@ export const GestionProyectos: React.FC<Props> = ({
   setVistaActual,
   onProyectoActualizado
 }) => {
+  const [kpiActivo, setKpiActivo] = useState<FiltroKpi>('todos');
   const [filtroEtapa, setFiltroEtapa] = useState('todas');
   const [filtroEstado, setFiltroEstado] = useState('todos');
   const detalleRef = useRef<HTMLDivElement | null>(null);
+
+  // Contadores de las 4 Tarjetas KPI de Cuellos de Botella
+  const conteosKpi = useMemo(() => {
+    const todos = proyectos.length;
+    const lider = proyectos.filter((p) => p.estado_actual === 'en_revision_lider').length;
+    const investigadoresCipade = proyectos.filter(
+      (p) =>
+        p.estado_actual === 'en_revision_investigadores' || p.estado_actual === 'novedad_cipade'
+    ).length;
+    const comiteParesStandby = proyectos.filter((p) =>
+      ['en_revision_comite', 'aprobado_lider', 'en_evaluacion_pares', 'en_standby'].includes(
+        p.estado_actual
+      )
+    ).length;
+    return { todos, lider, investigadoresCipade, comiteParesStandby };
+  }, [proyectos]);
 
   const proyectosFiltrados = useMemo(() => {
     return proyectos.filter((p) => {
       const matchEtapa = filtroEtapa === 'todas' || p.etapa_actual === filtroEtapa;
       const matchEstado = filtroEstado === 'todos' || p.estado_actual === filtroEstado;
-      return matchEtapa && matchEstado;
+
+      let matchKpi = true;
+      if (kpiActivo === 'lider') {
+        matchKpi = p.estado_actual === 'en_revision_lider';
+      } else if (kpiActivo === 'investigadores_cipade') {
+        matchKpi =
+          p.estado_actual === 'en_revision_investigadores' || p.estado_actual === 'novedad_cipade';
+      } else if (kpiActivo === 'comite_pares_standby') {
+        matchKpi = [
+          'en_revision_comite',
+          'aprobado_lider',
+          'en_evaluacion_pares',
+          'en_standby'
+        ].includes(p.estado_actual);
+      }
+
+      return matchEtapa && matchEstado && matchKpi;
     });
-  }, [proyectos, filtroEtapa, filtroEstado]);
+  }, [proyectos, filtroEtapa, filtroEstado, kpiActivo]);
 
   const seleccionarYAbrir = (p: Proyecto) => {
     setSeleccionado(p);
@@ -2276,12 +3010,54 @@ export const GestionProyectos: React.FC<Props> = ({
     }, 60);
   };
 
+  const tarjetasKpi: {
+    id: FiltroKpi;
+    titulo: string;
+    subtitulo: string;
+    cantidad: number;
+    accentColor: string;
+    bgActivo: string;
+  }[] = [
+    {
+      id: 'todos',
+      titulo: '1. Todos los Proyectos',
+      subtitulo: 'Inventario total de proyectos docentes',
+      cantidad: conteosKpi.todos,
+      accentColor: '#1F2937',
+      bgActivo: '#F3F4F6'
+    },
+    {
+      id: 'lider',
+      titulo: '2. En Revisión Líder',
+      subtitulo: 'Demora / Pendientes por aval de Líder',
+      cantidad: conteosKpi.lider,
+      accentColor: '#F59E0B',
+      bgActivo: '#FEF3C7'
+    },
+    {
+      id: 'investigadores_cipade',
+      titulo: '3. Corrección Inv. / Novedad CIPADE',
+      subtitulo: 'En manos de investigadores docentes',
+      cantidad: conteosKpi.investigadoresCipade,
+      accentColor: '#C8102E',
+      bgActivo: '#FEE2E2'
+    },
+    {
+      id: 'comite_pares_standby',
+      titulo: '4. En Comité / Pares / Standby',
+      subtitulo: 'Pendientes por comité, pares o vacaciones',
+      cantidad: conteosKpi.comiteParesStandby,
+      accentColor: '#C59B27',
+      bgActivo: '#FEF9E7'
+    }
+  ];
+
   return (
     <div>
       {/* Encabezado Principal */}
       <header
         style={{
-          marginBottom: '20px',
+          marginBottom: '18px',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'flex-start',
@@ -2291,11 +3067,11 @@ export const GestionProyectos: React.FC<Props> = ({
       >
         <div>
           <h1 style={{ fontSize: '23px', margin: '0 0 4px 0', color: '#1F2937' }}>
-            Tablero de Control y Trazabilidad de Proyectos Docentes
+            Tablero de Control, Cuellos de Botella y Trazabilidad Docente
           </h1>
           <p style={{ color: '#4B5563', fontSize: '13px', margin: 0 }}>
-            Seleccione cualquier proyecto de la tabla para abrir su <strong>Expediente Maestro-Detalle</strong>{' '}
-            con gestión de estados, evaluación de pares, subsanación y bitácora en vivo.
+            Monitoree en tiempo real de quién depende cada proyecto, cuántos días lleva en espera y gestione su
+            expediente completo sin cambiar de pantalla.
           </p>
         </div>
 
@@ -2317,7 +3093,76 @@ export const GestionProyectos: React.FC<Props> = ({
         </button>
       </header>
 
-      {/* Barra de Filtros */}
+      {/* =========================================================================
+          4 TARJETAS CLICABLES DE CUELLOS DE BOTELLA (KPIs)
+         ========================================================================= */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(4, 1fr)',
+          gap: '14px',
+          marginBottom: '16px'
+        }}
+      >
+        {tarjetasKpi.map((card) => {
+          const activa = kpiActivo === card.id;
+          return (
+            <button
+              key={card.id}
+              type="button"
+              onClick={() => {
+                setKpiActivo(card.id);
+                setFiltroEstado('todos');
+              }}
+              style={{
+                textAlign: 'left',
+                backgroundColor: activa ? card.bgActivo : '#FFFFFF',
+                border: activa ? `2px solid ${card.accentColor}` : '1px solid #E5E7EB',
+                borderTop: `4px solid ${card.accentColor}`,
+                borderRadius: '10px',
+                padding: '14px 16px',
+                cursor: 'pointer',
+                boxShadow: activa
+                  ? '0 3px 8px rgba(0, 0, 0, 0.08)'
+                  : '0 1px 2px rgba(0, 0, 0, 0.04)',
+                transition: 'all 0.12s ease',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: '10px'
+              }}
+            >
+              <div>
+                <div
+                  style={{
+                    fontSize: '12.5px',
+                    fontWeight: 800,
+                    color: '#1F2937',
+                    marginBottom: '3px'
+                  }}
+                >
+                  {card.titulo}
+                </div>
+                <div style={{ fontSize: '11px', color: '#4B5563', lineHeight: 1.3 }}>
+                  {card.subtitulo}
+                </div>
+              </div>
+              <div
+                style={{
+                  fontSize: '24px',
+                  fontWeight: 900,
+                  color: card.accentColor,
+                  lineHeight: 1
+                }}
+              >
+                {card.cantidad}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Barra de Filtros Adicionales */}
       <div
         style={{
           display: 'flex',
@@ -2375,11 +3220,14 @@ export const GestionProyectos: React.FC<Props> = ({
               marginBottom: '4px'
             }}
           >
-            Filtrar por Estado del Flujo:
+            Filtrar por Estado Específico:
           </label>
           <select
             value={filtroEstado}
-            onChange={(e) => setFiltroEstado(e.target.value)}
+            onChange={(e) => {
+              setFiltroEstado(e.target.value);
+              setKpiActivo('todos');
+            }}
             style={{
               backgroundColor: '#FFFFFF',
               color: '#1F2937',
@@ -2411,7 +3259,7 @@ export const GestionProyectos: React.FC<Props> = ({
           }}
         >
           <div>
-            Proyectos listados: <strong style={{ color: '#C8102E' }}>{proyectosFiltrados.length}</strong>
+            Proyectos mostrados: <strong style={{ color: '#C8102E' }}>{proyectosFiltrados.length}</strong>
           </div>
           <div>
             Modalidad: <strong style={{ color: '#065F46' }}>Investigación Docente FIAD</strong>
@@ -2455,7 +3303,7 @@ export const GestionProyectos: React.FC<Props> = ({
               const coCount = p.equipo.filter((m) => m.rol_equipo !== 'principal' && m.activo).length;
               const resp = obtenerResponsableActual(p.estado_actual);
               const fechaUltMov = p.trazabilidad?.[0]?.fecha_evento ?? p.fecha_radicacion;
-              const demora = calcularDemoraTexto(fechaUltMov);
+              const demora = calcularDiasEnEspera(fechaUltMov);
 
               return (
                 <tr
@@ -2499,17 +3347,17 @@ export const GestionProyectos: React.FC<Props> = ({
                         backgroundColor: resp.bg,
                         color: resp.text,
                         border: `1px solid ${resp.border}`,
-                        padding: '2px 8px',
+                        padding: '3px 9px',
                         borderRadius: '5px',
-                        fontSize: '11px',
+                        fontSize: '11.5px',
                         fontWeight: 700,
                         marginBottom: '3px'
                       }}
                     >
-                      En manos de: {resp.responsable}
+                      {resp.responsable} • {demora.resumenDemora}
                     </div>
                     <div style={{ fontSize: '11px', color: '#4B5563' }}>
-                      Últ. mov: <strong>{demora.fechaCorta}</strong> ({demora.diasTexto})
+                      Acción: {resp.accionRequerida}
                     </div>
                   </td>
                   <td style={{ padding: '13px 14px', textAlign: 'center' }}>

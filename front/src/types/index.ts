@@ -25,7 +25,9 @@ export type TipoEventoTrazabilidad =
   | 'novedad_cipade'
   | 'subsanacion_investigador'
   | 'cambio_equipo'
-  | 'standby';
+  | 'standby'
+  | 'cambio_manual'
+  | 'hito_etica_propiedad';
 
 export interface Usuario {
   id: number;
@@ -289,6 +291,18 @@ export const EVENTOS_METADATA: Record<
     color: '#8A6A10',
     bg: '#FEF9E7',
     border: '#C59B27'
+  },
+  cambio_manual: {
+    label: 'Ajuste Directo de Estado / Etapa (Modo Libre)',
+    color: '#8A6A10',
+    bg: '#FEF9E7',
+    border: '#C59B27'
+  },
+  hito_etica_propiedad: {
+    label: 'Cartas Comité de Ética y Propiedad Intelectual',
+    color: '#065F46',
+    bg: '#D1FAE5',
+    border: '#10B981'
   }
 };
 

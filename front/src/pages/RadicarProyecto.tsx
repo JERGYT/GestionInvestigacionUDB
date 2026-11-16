@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import type { Catalogos } from '../types';
+import { ETAPAS_METADATA, type Catalogos, type EtapaProyecto } from '../types';
 import { proyectosService } from '../services/proyectos';
-import { Users, Calendar, MailCheck } from 'lucide-react';
+import { Users, Calendar, MailCheck, Layers } from 'lucide-react';
 
 interface Props {
   catalogos: Catalogos;
@@ -12,6 +12,7 @@ interface Props {
 export const RadicarProyecto: React.FC<Props> = ({ catalogos, onRadicado, onCancelar }) => {
   const [titulo, setTitulo] = useState('');
   const [resumen, setResumen] = useState('');
+  const [etapaInicial, setEtapaInicial] = useState<EtapaProyecto>('idea');
   const [lineaId, setLineaId] = useState<number>(catalogos.lineas[0]?.id ?? 1);
   const [sublineaId, setSublineaId] = useState<number>(catalogos.sublineas[0]?.id ?? 1);
   const [principalId, setPrincipalId] = useState<number>(2);
@@ -59,6 +60,7 @@ export const RadicarProyecto: React.FC<Props> = ({ catalogos, onRadicado, onCanc
       const respuesta = await proyectosService.radicar({
         titulo: titulo.trim(),
         resumen: resumen.trim(),
+        etapa_actual: etapaInicial,
         linea_id: lineaId,
         sublinea_id: sublineaId,
         investigador_principal_id: principalId,
@@ -78,10 +80,28 @@ export const RadicarProyecto: React.FC<Props> = ({ catalogos, onRadicado, onCanc
     }
   };
 
+  const opcionesEtapaInicial: { id: EtapaProyecto; titulo: string; desc: string }[] = [
+    {
+      id: 'idea',
+      titulo: '1. Idea (Por Defecto)',
+      desc: 'Inicia el ciclo desde la formulación de la idea.'
+    },
+    {
+      id: 'anteproyecto',
+      titulo: '2. Anteproyecto en Curso',
+      desc: 'Para propuestas que ya cuentan con idea aprobada previamente.'
+    },
+    {
+      id: 'proyecto',
+      titulo: '3. Proyecto Formal',
+      desc: 'Para proyectos que ingresan directamente a evaluación de documento final.'
+    }
+  ];
+
   return (
     <div
       style={{
-        maxWidth: '780px',
+        maxWidth: '820px',
         margin: '0 auto',
         backgroundColor: '#FFFFFF',
         padding: '32px',
@@ -107,11 +127,12 @@ export const RadicarProyecto: React.FC<Props> = ({ catalogos, onRadicado, onCanc
           Modalidad Exclusiva: Proyecto Docente
         </span>
         <h2 style={{ fontSize: '22px', margin: '10px 0 6px 0', color: '#1F2937' }}>
-          Radicar Nuevo Proyecto de Investigación Docente
+          Radicar Propuesta de Investigación Docente
         </h2>
         <p style={{ color: '#4B5563', fontSize: '13px', margin: 0 }}>
-          El proyecto se radicará en etapa de <strong>Idea</strong> con estado inicial{' '}
-          <strong style={{ color: '#92400E' }}>En Revisión Líder</strong>, dejando constancia de la fecha exacta de radicación y del soporte enviado por correo institucional.
+          El proyecto se radicará en la etapa seleccionada (<strong>{ETAPAS_METADATA[etapaInicial].label}</strong>) con
+          estado inicial <strong style={{ color: '#92400E' }}>En Revisión Líder</strong>, dejando constancia de la fecha
+          exacta y del soporte enviado por correo institucional.
         </p>
       </div>
 
@@ -133,6 +154,66 @@ export const RadicarProyecto: React.FC<Props> = ({ catalogos, onRadicado, onCanc
       )}
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+        {/* Selector de Etapa Inicial de Radicación */}
+        <div
+          style={{
+            backgroundColor: '#F9FAFB',
+            padding: '16px',
+            borderRadius: '8px',
+            border: '1px solid #E5E7EB'
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              fontSize: '12.5px',
+              fontWeight: 700,
+              color: '#1F2937',
+              marginBottom: '10px'
+            }}
+          >
+            <Layers size={16} color="#C8102E" /> Etapa Inicial de Registro (Seleccione si inicia en Idea o si ya venía en curso):
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+            {opcionesEtapaInicial.map((op) => {
+              const activa = etapaInicial === op.id;
+              return (
+                <button
+                  key={op.id}
+                  type="button"
+                  onClick={() => setEtapaInicial(op.id)}
+                  style={{
+                    textAlign: 'left',
+                    padding: '11px 12px',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    backgroundColor: activa ? '#FEF2F2' : '#FFFFFF',
+                    border: activa ? '2px solid #C8102E' : '1px solid #D1D5DB',
+                    transition: 'all 0.12s ease'
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: '12.5px',
+                      fontWeight: 800,
+                      color: activa ? '#C8102E' : '#1F2937',
+                      marginBottom: '3px'
+                    }}
+                  >
+                    {op.titulo}
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#4B5563', lineHeight: 1.35 }}>
+                    {op.desc}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         <div>
           <label style={{ display: 'block', fontSize: '12px', color: '#374151', marginBottom: '6px', fontWeight: 600 }}>
             Título del Proyecto Docente *
@@ -390,7 +471,9 @@ export const RadicarProyecto: React.FC<Props> = ({ catalogos, onRadicado, onCanc
               fontSize: '13.5px'
             }}
           >
-            {enviando ? 'Radicando Proyecto Docente...' : 'Radicar Proyecto y Registrar en Historial'}
+            {enviando
+              ? 'Radicando Proyecto Docente...'
+              : `Radicar en Etapa de ${ETAPAS_METADATA[etapaInicial].label} y Registrar en Historial`}
           </button>
           <button
             type="button"
